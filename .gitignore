@@ -1,0 +1,59 @@
+# ==============================================================================
+# ROOT .GITIGNORE (Managing Backend and Frontend from Root)
+# ==============================================================================
+
+# Backend Dependencies & Environment
+/Backend/node_modules/
+/Backend/.env
+/Backend/.env.local
+/Backend/.env.*.local
+/Backend/*.env
+/Backend/logs/
+/Backend/*.log
+/Backend/npm-debug.log*
+/Backend/yarn-debug.log*
+/Backend/yarn-error.log*
+/Backend/pnpm-debug.log*
+
+# Frontend Dependencies, Build & Environment
+/Frontend/node_modules/
+/Frontend/dist/
+/Frontend/dist-ssr/
+/Frontend/build/
+/Frontend/*.local
+/Frontend/.env
+/Frontend/.env.local
+/Frontend/.env.*.local
+/Frontend/*.env
+/Frontend/logs/
+/Frontend/*.log
+/Frontend/npm-debug.log*
+/Frontend/yarn-debug.log*
+/Frontend/yarn-error.log*
+/Frontend/pnpm-debug.log*
+
+# General / Global Fallbacks
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+
+# Editor & IDE Settings
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
