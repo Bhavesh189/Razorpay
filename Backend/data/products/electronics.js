@@ -122,7 +122,7 @@ export const electronicsProducts = [
       productId: "prod-32",
       title: "Pro Esports RGB Gaming Mouse (7200 DPI Optical)",
       price: 399,
-      pitch: "Laptop ke sath ek high-precision RGB gaming mouse aur mechanical keyboard lena perfect combo rahega! 💻🖱️"
+      pitch: "Pair your high-performance laptop with a precision RGB gaming mouse and mechanical keyboard for the ultimate setup! 💻🖱️"
     }
   },
   {
@@ -154,7 +154,7 @@ export const electronicsProducts = [
       productId: "prod-33",
       title: "Compact 60% RGB Mechanical Gaming Keyboard",
       price: 799,
-      pitch: "High-FPS gaming ke liye mechanical gaming keyboard aur RGB mouse add karein! ⌨️🎮"
+      pitch: "Add our low-latency mechanical gaming keyboard and optical mouse to maximize your productivity! ⌨️🎮"
     }
   },
   {
@@ -186,7 +186,7 @@ export const electronicsProducts = [
       productId: "prod-34",
       title: "Aluminum Dual-Turbo Fan RGB Laptop Cooling Pad",
       price: 599,
-      pitch: "Heavy gaming me laptop ko ice-cool rakhne ke liye 2800 RPM Turbo Cooling Pad bundle karein! ❄️"
+      pitch: "Keep your laptop cool under heavy gaming loads with our 2800 RPM Dual-Turbo Cooling Pad! ❄️"
     }
   },
   {
@@ -218,7 +218,7 @@ export const electronicsProducts = [
       productId: "prod-32",
       title: "Pro Esports RGB Gaming Mouse (7200 DPI)",
       price: 399,
-      pitch: "Is ultra-slim laptop ke sath lightweight wireless gaming mouse lena best rahega! 🖱️"
+      pitch: "Complement this ultra-slim laptop with a lightweight precision optical mouse for effortless mobility! 🖱️"
     }
   },
   {
@@ -250,7 +250,7 @@ export const electronicsProducts = [
       productId: "prod-33",
       title: "Compact 60% RGB Mechanical Gaming Keyboard",
       price: 799,
-      pitch: "Pro gaming setup ke liye mechanical keyboard aur high-precision mouse bundle karein! ⌨️🖱️"
+      pitch: "Elevate your battle station with a high-tactile mechanical keyboard and optical gaming mouse! ⌨️🖱️"
     }
   },
   {
@@ -282,7 +282,7 @@ export const electronicsProducts = [
       productId: "prod-34",
       title: "Aluminum Dual-Turbo Fan RGB Laptop Cooling Pad",
       price: 599,
-      pitch: "Alienware beast ke peak performance ke liye turbo cooling pad add karna best investment hai! ❄️"
+      pitch: "Protect your flagship investment and sustain peak frame rates with an aluminum turbo cooling pad! ❄️"
     }
   },
   {

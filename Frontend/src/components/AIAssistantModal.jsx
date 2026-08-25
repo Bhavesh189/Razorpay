@@ -33,7 +33,10 @@ import {
   BarChart3,
   Target,
   SlidersHorizontal,
-  ArrowRight
+  ArrowRight,
+  Lightbulb,
+  Layers,
+  PackagePlus
 } from 'lucide-react';
 import { SafeImage } from './SafeImage';
 import confetti from 'canvas-confetti';
@@ -230,7 +233,7 @@ const RequirementCard = ({ questionnaire, onSubmit }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-300 uppercase tracking-wider">
             <Tag className="w-3 h-3 text-amber-400" />
-            <span>2. Set Max Budget (बजट सेट करें):</span>
+            <span>2. Set Max Budget (Optional):</span>
           </div>
           {isBudgetActive && budget && (
             <span className="text-[10px] font-black text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
@@ -404,7 +407,7 @@ export const AIAssistantModal = () => {
       products: [],
       upsellPitch: null,
       suggestedFollowUpQueries: [
-        "Muje laptop chaiye 💻",
+        "I want to buy a laptop 💻",
         "5G Smartphones & Gadgets 📱",
         "Men Oversized 220 GSM T-Shirts 👕",
         "Show My Cart 🛒"
@@ -794,6 +797,7 @@ export const AIAssistantModal = () => {
             text: data.reply,
             questionnaire: data.questionnaire || null,
             products: data.products || [],
+            relatedProducts: data.relatedProducts || [],
             upsellPitch: data.upsellPitch || null,
             inChatCheckout: data.inChatCheckout || null,
             campaign: data.campaign || null,
@@ -880,46 +884,46 @@ export const AIAssistantModal = () => {
     let upsellPayload = null;
 
     if (titleLower.includes("laptop") || subCat.includes("laptop")) {
-      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** cart me add ho gaya! 💻\n\n💡 **Advisor Tip**: Laptop ke sath gaming aur fast typing ke liye ek **RGB Gaming Mouse** (₹399) aur **Mechanical Keyboard** (₹799) ya **Turbo Cooling Pad** (₹599) lena bhi perfect combo rahega!`;
+      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** added to cart! 💻\n\n💡 **Advisor Tip**: For an optimal setup, we recommend pairing your laptop with a high-precision **RGB Gaming Mouse** (₹399), **Mechanical Keyboard** (₹799), or **Dual-Turbo Cooling Pad** (₹599)!`;
       upsellPayload = {
         title: "Pro Esports RGB Optical Gaming Mouse (7200 DPI)",
         price: 399,
-        pitchMessage: "Laptop ke sath pro gaming mouse aur mechanical keyboard pair karna smooth control ke liye zaroori hai!"
+        pitchMessage: "Pairing a precision RGB gaming mouse and mechanical keyboard ensures smooth control and peak productivity!"
       };
     } else if (titleLower.includes("phone") || subCat.includes("smartphones") || subCat.includes("mobile")) {
-      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** cart me add ho gaya! 📱\n\n💡 **Advisor Tip**: Phone ke sath screen safety ke liye **Tempered Glass** aur **65W GaN Fast Charger** (₹299) add karna mat bhuliye!`;
+      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** added to cart! 📱\n\n💡 **Advisor Tip**: Protect your smartphone and ensure ultra-fast charging with **Tempered Glass** screen protection and a **65W GaN Fast Charger** (₹299)!`;
       upsellPayload = {
         title: "65W GaN Turbo Fast Charger with Type-C Cable",
         price: 299,
-        pitchMessage: "Phone ko 3x faster charge karne ke liye GaN adapter bundle karein!"
+        pitchMessage: "Power your smartphone 3x faster with our compact 65W GaN fast charger adapter."
       };
     } else if (titleLower.includes("saree") || subCat.includes("sarees") || titleLower.includes("kurti")) {
-      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** cart me add ho gaya! 👗\n\n💡 **Advisor Tip**: Is festive outfit ke sath matching **24K Gold Plated Temple Choker Set** (₹249) lena ekdum royal look dega!`;
+      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** added to cart! 👗\n\n💡 **Advisor Tip**: Pair this festive outfit with our matching **24K Gold Plated Temple Choker Set** (₹249) for a complete regal look!`;
       upsellPayload = {
         title: "Traditional 24K Gold Plated Temple Choker Jewellery Set",
         price: 249,
-        pitchMessage: "Festive look ko complete karne ke liye matching Temple jewellery bundle karein!"
+        pitchMessage: "Complete your festive ensemble with this handcrafted 24K Temple jewellery choker set."
       };
     } else if (titleLower.includes("shoe") || subCat.includes("footwear")) {
-      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** cart me add ho gaya! 👟\n\n💡 **Advisor Tip**: In shoes ke sath **Memory Foam Cloud Insoles** (₹149) aur breathable socks lena all-day walking comfort dega!`;
+      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** added to cart! 👟\n\n💡 **Advisor Tip**: Bundle your footwear with **Memory Foam Cloud Insoles** (₹149) and breathable athletic socks for all-day comfort!`;
       upsellPayload = {
         title: "Orthopedic Memory Foam Cloud Insoles (Set of 2)",
         price: 149,
-        pitchMessage: "Custom cloud comfort ke liye memory foam insoles add karein!"
+        pitchMessage: "Add dual-layer memory foam insoles for custom arch support and all-day walking comfort."
       };
     } else if (titleLower.includes("car") || subCat.includes("car")) {
-      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** cart me add ho gaya! 🚗\n\n💡 **Advisor Tip**: Car ke liye **120W Portable Handheld Vacuum** aur **Tire Inflator** sath rakhna long drives par must-have hai!`;
+      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** added to cart! 🚗\n\n💡 **Advisor Tip**: A **120W Portable Handheld Car Vacuum** and **Digital Tire Inflator** are essential accessories for road trips!`;
       upsellPayload = {
         title: "High Power 120W Portable Wireless Car Vacuum Cleaner",
         price: 349,
-        pitchMessage: "Car interior ko spotless rakhne ke liye vacuum cleaner bundle karein!"
+        pitchMessage: "Keep your vehicle interior spotless with this high-power portable vacuum cleaner."
       };
     } else if (titleLower.includes("bike") || subCat.includes("bike")) {
-      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** cart me add ho gaya! 🏍️\n\n💡 **Advisor Tip**: Riding safety ke liye **Touchscreen Hard Knuckle Biker Gloves** (₹299) aur **Anti-Theft Disc Lock** bundle karein!`;
+      crossSellText = `🎉 **"${product.title.slice(0, 30)}..."** added to cart! 🏍️\n\n💡 **Advisor Tip**: For enhanced riding safety, bundle **Touchscreen Hard Knuckle Riding Gloves** (₹299) and an **Anti-Theft Disc Lock**!`;
       upsellPayload = {
         title: "Touchscreen Hard Knuckle Protective Biker Riding Gloves",
         price: 299,
-        pitchMessage: "Riding comfort aur safety ke liye protective gloves add karein!"
+        pitchMessage: "Enjoy superior grip, knuckle protection, and touchscreen convenience while riding."
       };
     }
 
@@ -1281,6 +1285,123 @@ export const AIAssistantModal = () => {
                                 <Zap className="w-3 h-3 text-amber-300" /> Buy
                               </button>
                             </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* RELATED PRODUCTS & COMPLEMENTARY ADD-ONS WITH "WHY BUY THIS SEPARATELY" RATIONALE */}
+                {!msg.questionnaire && msg.relatedProducts && msg.relatedProducts.length > 0 && (
+                  <div className="w-full pl-9 space-y-3 pt-1">
+                    <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-indigo-500/10 flex items-center justify-center border border-indigo-200 text-indigo-700">
+                          <Layers className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 font-['Outfit']">
+                            Essential Add-ons & Related Products ({msg.relatedProducts.length} Items)
+                          </h4>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            Carefully paired items to complete, protect & elevate your setup
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                        Recommended Synergy
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {msg.relatedProducts.map((relProd) => (
+                        <div
+                          key={relProd.id}
+                          className="bg-white border-2 border-indigo-100/90 hover:border-indigo-400 rounded-2xl p-3.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all space-y-2.5 group"
+                        >
+                          {/* Top Row: Image + Main Details */}
+                          <div className="flex gap-3">
+                            <div 
+                              onClick={() => handleWatchProduct(relProd)}
+                              className="w-20 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer relative"
+                            >
+                              <SafeImage
+                                src={relProd.images[0]}
+                                alt={relProd.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                              />
+                              <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                                {relProd.rating}★
+                              </span>
+                            </div>
+
+                            <div className="flex-1 min-w-0 flex flex-col justify-between">
+                              <div>
+                                {relProd.benefitTag && (
+                                  <span className="inline-block text-[9px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md mb-1 border border-indigo-100">
+                                    ✨ {relProd.benefitTag}
+                                  </span>
+                                )}
+                                <h5 
+                                  onClick={() => handleWatchProduct(relProd)}
+                                  className="text-xs font-bold text-slate-900 line-clamp-2 cursor-pointer hover:text-indigo-600 leading-snug"
+                                >
+                                  {relProd.title}
+                                </h5>
+                              </div>
+
+                              {/* Price */}
+                              <div className="flex items-baseline gap-1.5 mt-1">
+                                <span className="text-sm font-black text-slate-900 font-['Outfit']">
+                                  ₹{relProd.price}
+                                </span>
+                                <span className="text-[10px] text-slate-400 line-through">
+                                  ₹{relProd.originalPrice}
+                                </span>
+                                <span className="text-[10px] font-bold text-emerald-600">
+                                  {relProd.discount}% off
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* "WHY YOU SHOULD ADD THIS SEPARATELY" REASONING BOX */}
+                          <div className="bg-gradient-to-r from-amber-50/90 to-orange-50/80 border border-amber-200/90 rounded-xl p-2.5 space-y-1">
+                            <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-800 uppercase tracking-wider">
+                              <Lightbulb className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 animate-pulse" />
+                              <span>Why Buy This Separately:</span>
+                            </div>
+                            <p className="text-[11px] text-slate-700 leading-relaxed font-medium">
+                              {relProd.whyBuy}
+                            </p>
+                          </div>
+
+                          {/* Action Buttons: Watch, Add to Cart, Buy Now */}
+                          <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100">
+                            <button
+                              onClick={() => handleWatchProduct(relProd)}
+                              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                              title="View full specifications"
+                            >
+                              <Eye className="w-3 h-3" /> Watch
+                            </button>
+
+                            <button
+                              onClick={() => handleAddProduct(relProd)}
+                              className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                              title="Add related product to cart"
+                            >
+                              <Plus className="w-3 h-3" /> Add
+                            </button>
+
+                            <button
+                              onClick={() => handleBuyProduct(relProd)}
+                              className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-[10px] font-extrabold py-2 rounded-lg shadow-xs transition-all flex items-center justify-center gap-1 cursor-pointer"
+                              title="Instant Checkout with Razorpay"
+                            >
+                              <Zap className="w-3 h-3 text-amber-300" /> Buy
+                            </button>
                           </div>
                         </div>
                       ))}
