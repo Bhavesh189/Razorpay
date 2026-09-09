@@ -49,7 +49,7 @@ export const AuthModal = () => {
       setUser({
         isLoggedIn: true,
         phone: phoneNumber,
-        name: userName || "Bhavey Sharma"
+        name: userName || "Bhavesh Sharma"
       });
       showToast("Logged in successfully! Welcome to Infinity Store 🎉");
       setActiveModal(null);
@@ -81,10 +81,10 @@ export const AuthModal = () => {
             <Smartphone className="w-6 h-6 text-white" />
           </div>
           <h3 className="text-xl font-black font-['Outfit']">
-            {step === 1 ? "Sign Up or Sign In" : "Verify Mobile OTP"}
+            {step === 1 ? "Instant Guest Profile" : "Verify Mobile Number"}
           </h3>
           <p className="text-xs text-indigo-100">
-            {step === 1 ? "Access your Orders, Wishlist and Special First-Order Discounts" : `OTP sent to +91 ${phoneNumber}`}
+            {step === 1 ? "Fast 1-Click Razorpay Checkout • No password or account needed" : `Verification code sent to +91 ${phoneNumber}`}
           </p>
         </div>
 

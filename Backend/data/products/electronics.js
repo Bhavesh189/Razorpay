@@ -380,5 +380,165 @@ export const electronicsProducts = [
       price: 399,
       pitch: "Bundle with high-DPI gaming mouse for instant competitive advantage! 🖱️"
     }
+  },
+  {
+    id: "prod-35",
+    title: "Active Noise Cancelling (ANC) Wireless Over-Ear Headphones with 50H Battery & Hi-Res Audio",
+    mainCategory: "Electronics",
+    category: "electronics",
+    subCategory: "Audio & Wearables",
+    gender: "All",
+    price: 1299,
+    originalPrice: 4999,
+    discount: 74,
+    rating: 4.8,
+    reviewsCount: 31200,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 50,
+    colors: ["Midnight Matte Black", "Silver Mist", "Navy Blue"],
+    sizes: ["Adjustable Memory Foam Earcups"],
+    tags: ["headphones", "anc", "noise cancelling", "wireless headphones", "bluetooth", "audio", "hi-res", "bass", "over-ear"],
+    images: [
+      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "Ultra-Soft Protein Leather + Memory Foam Cushions + Metal Headband Slider",
+    seller: { name: "Acoustic Labs Audio", rating: 4.8 },
+    description: "40mm custom dynamic titanium drivers, Hybrid Active Noise Cancellation up to 35dB, Transparency Ambient Mode, 50-hour battery life with 10-min quick charge (giving 5 hours playback), and foldable travel design.",
+    upsellSuggestion: {
+      productId: "prod-37",
+      title: "20000mAh 65W Fast PD Metal Power Bank",
+      price: 999,
+      pitch: "Keep your audio gear and laptop charged on flights and travels with our 65W Power Bank! ⚡"
+    }
+  },
+  {
+    id: "prod-36",
+    title: "Low Latency 40ms ANC True Wireless Earbuds with 4-Mic ENC & Spatial 3D Audio",
+    mainCategory: "Electronics",
+    category: "electronics",
+    subCategory: "Audio & Wearables",
+    gender: "All",
+    price: 549,
+    originalPrice: 2499,
+    discount: 78,
+    rating: 4.7,
+    reviewsCount: 41800,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 35,
+    colors: ["Phantom Black", "Pearl White", "Cyber Neon"],
+    sizes: ["Standard In-Ear with 3 Ear-Tip Sizes (S/M/L)"],
+    tags: ["earbuds", "tws", "wireless earphones", "anc earbuds", "gaming earbuds", "bluetooth", "airpods", "audio"],
+    images: [
+      "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "IPX5 Sweatproof ABS Matte Polymer + Magnetic Charging Case",
+    seller: { name: "Sonic Wave Technologies", rating: 4.7 },
+    description: "13mm graphene drivers, Quad-Mic AI Environmental Noise Cancellation for crystal calls, 40ms ultra-low latency gaming mode, Bluetooth 5.3 instant auto-connect, and 36-hour total battery life with Type-C fast charge.",
+    upsellSuggestion: {
+      productId: "prod-24",
+      title: "1.96-inch HD Bluetooth Calling Smartwatch",
+      price: 649,
+      pitch: "Pair these TWS earbuds with a Bluetooth Calling Smartwatch for total wireless freedom! ⌚"
+    }
+  },
+  {
+    id: "prod-37",
+    title: "20000mAh 65W Fast PD Metal Power Bank for Laptops, Tablets & Smartphones",
+    mainCategory: "Electronics",
+    category: "electronics",
+    subCategory: "Mobile Accessories",
+    gender: "All",
+    price: 999,
+    originalPrice: 3499,
+    discount: 71,
+    rating: 4.8,
+    reviewsCount: 22400,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 50,
+    colors: ["Space Grey Metallic", "Matte Carbon Black"],
+    sizes: ["Compact 20000mAh Lithium-Polymer"],
+    tags: ["power bank", "powerbank", "65w charger", "laptop charger", "battery pack", "fast charging", "pd charger", "electronics"],
+    images: [
+      "https://images.unsplash.com/photo-1609592426815-56d11f7c1341?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "Anodized Aerospace Aluminum Casing + Multi-Protection Intelligent IC",
+    seller: { name: "VoltCharge Power Labs", rating: 4.8 },
+    description: "Supports 65W Power Delivery to charge MacBooks, Type-C Laptops, iPhones, and Androids at maximum turbo speeds. Features dual Type-C PD ports + dual USB-A QC 3.0 ports with real-time digital LED power display.",
+    upsellSuggestion: {
+      productId: "prod-30",
+      title: "65W GaN Turbo Fast Charger Adapter",
+      price: 299,
+      pitch: "Need a fast GaN wall adapter to refill this 20000mAh power bank in under 90 minutes? ⚡"
+    }
+  },
+  {
+    id: "prod-38",
+    title: "120W Dolby Atmos Wireless Bluetooth Soundbar with Powerful Built-in Subwoofer & HDMI ARC",
+    mainCategory: "Electronics",
+    category: "electronics",
+    subCategory: "Audio & Wearables",
+    gender: "All",
+    price: 1899,
+    originalPrice: 6999,
+    discount: 73,
+    rating: 4.7,
+    reviewsCount: 15300,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 50,
+    colors: ["Midnight Black Mesh with Piano Gloss Accents"],
+    sizes: ["32-inch Slim Soundbar (Wall Mountable)"],
+    tags: ["soundbar", "home theater", "speaker", "bluetooth speaker", "dolby atmos", "tv speaker", "audio", "bass", "subwoofer"],
+    images: [
+      "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "Acoustic Engineered Metal Grille + Resonance-Damped Wood Composite Chassis",
+    seller: { name: "Dolby Acoustic Labs", rating: 4.7 },
+    description: "120W Peak Output with 4 full-range speaker drivers and dual dedicated bass reflex ports. Features 3 EQ audio modes (Movie, Music, News), HDMI ARC, Optical, Bluetooth 5.3, and AUX inputs with wireless remote control.",
+    upsellSuggestion: {
+      productId: "prod-35",
+      title: "Active Noise Cancelling Wireless Headphones",
+      price: 1299,
+      pitch: "Check out our ANC Wireless Headphones for late night private listening without disturbing anyone! 🎧"
+    }
+  },
+  {
+    id: "prod-39",
+    title: "360° Smart AI Home Security WiFi Camera with 2K Color Night Vision & 2-Way Audio",
+    mainCategory: "Electronics",
+    category: "electronics",
+    subCategory: "Smart Home & Gadgets",
+    gender: "All",
+    price: 699,
+    originalPrice: 2499,
+    discount: 72,
+    rating: 4.6,
+    reviewsCount: 18700,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 40,
+    colors: ["Clean Matte White"],
+    sizes: ["Compact Pan & Tilt (360° Horizontal / 114° Vertical)"],
+    tags: ["cctv", "security camera", "wifi camera", "smart home", "camera", "baby monitor", "night vision", "electronics"],
+    images: [
+      "https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1558002038-1055907df827?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "High-Durability ABS Weather-Resistant Shell",
+    seller: { name: "SecureHome Smart Tech", rating: 4.6 },
+    description: "2K Ultra HD resolution, AI human motion detection and auto-tracking, infrared + full color night vision, 2-way crystal intercom talk, microSD up to 256GB + Cloud storage, and real-time mobile app push alerts.",
+    upsellSuggestion: {
+      productId: "prod-37",
+      title: "20000mAh 65W Fast PD Metal Power Bank",
+      price: 999,
+      pitch: "Ensure uninterrupted security backup with our heavy duty Power Bank! ⚡"
+    }
   }
 ];

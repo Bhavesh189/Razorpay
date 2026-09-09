@@ -153,5 +153,133 @@ export const jewelleryAndBagsProducts = [
       price: 349,
       pitch: "Want a traditional Banarasi silk saree that matches these golden juttis? 🥻"
     }
+  },
+  {
+    id: "prod-48",
+    title: "Anti-Theft Water-Resistant 15.6 Inch Laptop Backpack with USB Charging Port & Hidden Secret Pockets",
+    mainCategory: "Jewellery & Accessories",
+    category: "jewellery-accessories",
+    subCategory: "Women Bags",
+    gender: "All",
+    price: 549,
+    originalPrice: 1999,
+    discount: 72,
+    rating: 4.8,
+    reviewsCount: 34100,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 50,
+    colors: ["Obsidian Black", "Space Grey", "Navy Blue"],
+    sizes: ["35L Large Capacity (Fits up to 16-inch Laptops)"],
+    tags: ["backpack", "laptop bag", "college bag", "travel bag", "anti theft backpack", "bag", "office bag"],
+    images: [
+      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "High-Density 900D Waterproof Oxford Fabric + Ergonomic Honeycomb Air Cushion",
+    seller: { name: "UrbanTravel Gear", rating: 4.8 },
+    description: "Multi-compartment travel and daily commuter backpack with dedicated padded shock-absorbing laptop sleeve, integrated USB port for charging on the go, luggage trolley strap, and concealed anti-theft back pocket.",
+    upsellSuggestion: {
+      productId: "prod-37",
+      title: "20000mAh 65W Fast PD Metal Power Bank",
+      price: 999,
+      pitch: "Plug our 20000mAh Power Bank into this backpack's USB port to charge your phone anytime! ⚡"
+    }
+  },
+  {
+    id: "prod-49",
+    title: "Luxury Aviator Polarized UV400 Sunglasses with Ultra-Light Magnesium Aluminum Frame",
+    mainCategory: "Jewellery & Accessories",
+    category: "jewellery-accessories",
+    subCategory: "Women Accessories",
+    gender: "All",
+    price: 299,
+    originalPrice: 1199,
+    discount: 75,
+    rating: 4.7,
+    reviewsCount: 21800,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 35,
+    colors: ["Classic Midnight Black", "Ocean Gradient Blue", "Emerald Green Mirror"],
+    sizes: ["Standard Universal Fit with Hard Protective Case"],
+    tags: ["sunglasses", "shades", "goggles", "polarized", "eyewear", "uv400", "accessories", "mens sunglasses"],
+    images: [
+      "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "TAC 9-Layer Polarized HD Lens + Aircraft Magnesium Alloy Frame",
+    seller: { name: "OptiVision Luxury Eyewear", rating: 4.7 },
+    description: "Eliminates harmful glare, provides 100% UV400 protection from UVA/UVB rays, spring-loaded flexible hinges for pressure-free fit, and shatterproof scratch-resistant lenses for driving, travel, and sunny outdoors.",
+    upsellSuggestion: {
+      productId: "prod-50",
+      title: "100% Genuine Top-Grain Leather RFID Slim Wallet",
+      price: 249,
+      pitch: "Pair these luxury shades with our genuine leather wallet for a sophisticated travel look! 💼"
+    }
+  },
+  {
+    id: "prod-50",
+    title: "100% Genuine Vintage Top-Grain Leather Bifold Slim Wallet with RFID Blocking & Quick-Access Card Slot",
+    mainCategory: "Jewellery & Accessories",
+    category: "jewellery-accessories",
+    subCategory: "Women Accessories",
+    gender: "Men",
+    price: 249,
+    originalPrice: 999,
+    discount: 75,
+    rating: 4.8,
+    reviewsCount: 37900,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 30,
+    colors: ["Distressed Tan Brown", "Classic Jet Black", "Coffee Dark Brown"],
+    sizes: ["Ultra Slim (Holds 8 Cards + Currency Compartment)"],
+    tags: ["wallet", "leather wallet", "rfid wallet", "men wallet", "purse", "card holder", "accessories"],
+    images: [
+      "https://images.unsplash.com/photo-1627123424574-724758594e93?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "100% Genuine Hunter Cowhide Leather + RFID Signal Shielding Lining",
+    seller: { name: "Heritage Leathercraft", rating: 4.8 },
+    description: "Handcrafted from durable top-grain leather that develops a beautiful patina over time. Equipped with military-grade RFID blocking technology to safeguard credit/debit cards from digital theft.",
+    upsellSuggestion: {
+      productId: "prod-48",
+      title: "Anti-Theft Water-Resistant Laptop Backpack",
+      price: 549,
+      pitch: "Keep your new leather wallet and gadgets safe inside our anti-theft waterproof backpack! 🎒"
+    }
+  },
+  {
+    id: "prod-51",
+    title: "Men's Luxury Chronograph Quartz Waterproof Stainless Steel Sports Watch with Date & Luminous Hands",
+    mainCategory: "Jewellery & Accessories",
+    category: "jewellery-accessories",
+    subCategory: "Women Accessories",
+    gender: "Men",
+    price: 499,
+    originalPrice: 2499,
+    discount: 80,
+    rating: 4.8,
+    reviewsCount: 26300,
+    freeDelivery: true,
+    infinityMall: true,
+    firstOrderDiscount: 50,
+    colors: ["Deep Emerald Green Dial with Silver Strap", "Midnight Blue with Rose Gold", "All Black Matte"],
+    sizes: ["42mm Dial Diameter (Adjustable Link Strap + Link Remover Tool)"],
+    tags: ["watch", "men watch", "chronograph", "luxury watch", "analog watch", "steel watch", "wrist watch"],
+    images: [
+      "https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=700&auto=format&fit=crop&q=80",
+      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=700&auto=format&fit=crop&q=80"
+    ],
+    fabric: "Solid 316L Stainless Steel Bracelet + Scratch-Resistant Hardlex Mineral Glass",
+    seller: { name: "Chronos Swiss Craft", rating: 4.8 },
+    description: "Precision Japanese Quartz movement, functional multi-dial chronograph stopwatch, automatic calendar date display, 30M waterproof rating, and Swiss luminous hands for visibility in pitch darkness.",
+    upsellSuggestion: {
+      productId: "prod-44",
+      title: "Luxury Royal Oud 100ml EDP Perfume",
+      price: 499,
+      pitch: "Nothing compliments a luxury steel watch like our regal Royal Oud fragrance! 👑"
+    }
   }
 ];

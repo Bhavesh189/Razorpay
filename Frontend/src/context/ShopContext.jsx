@@ -30,6 +30,8 @@ export const ShopProvider = ({ children }) => {
     sortBy: "relevance", // 'relevance' | 'price-low' | 'price-high' | 'rating' | 'discount'
   });
 
+  const [searchDidYouMean, setSearchDidYouMean] = useState(null);
+
   // Fetch Products dynamically from backend (10k+ catalog)
   const fetchProductsFromBackend = useCallback(async (page = 1, append = false) => {
     setIsProductsLoading(true);
@@ -62,6 +64,7 @@ export const ShopProvider = ({ children }) => {
           setCurrentPage(data.currentPage);
           setTotalPages(data.totalPages);
           setTotalCatalogCount(data.total);
+          setSearchDidYouMean(data.didYouMean || null);
           setIsProductsLoading(false);
           return;
         }
@@ -72,12 +75,16 @@ export const ShopProvider = ({ children }) => {
     setIsProductsLoading(false);
   }, [selectedCategory, selectedSubCategory, searchQuery, filters]);
 
-  // Refetch when filters or categories change
+  // Refetch when filters, categories or search change (with 150ms debounce for typing)
   useEffect(() => {
-    fetchProductsFromBackend(1, false);
-  }, [fetchProductsFromBackend]);
+    const handler = setTimeout(() => {
+      fetchProductsFromBackend(1, false);
+    }, searchQuery ? 150 : 0);
 
-  // Load more items from 10k catalog (infinite scroll or button click)
+    return () => clearTimeout(handler);
+  }, [fetchProductsFromBackend, searchQuery]);
+
+  // Load more items from 125k catalog (infinite scroll or button click)
   const loadMoreProducts = () => {
     if (currentPage < totalPages && !isProductsLoading) {
       fetchProductsFromBackend(currentPage + 1, true);
@@ -122,7 +129,7 @@ export const ShopProvider = ({ children }) => {
       return saved ? JSON.parse(saved) : [
         {
           id: "addr-1",
-          name: "Bhavey Sharma",
+          name: "Bhavesh Sharma",
           phone: "9876543210",
           houseNo: "Flat 402, Sunshine Heights",
           roadName: "MG Road, Near Metro Station",
@@ -154,6 +161,24 @@ export const ShopProvider = ({ children }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+
+  // AI Chat History (In-memory: Preserved across modal close/reopen, completely fresh on page refresh)
+  const defaultAiWelcomeMessage = {
+    id: "msg-welcome",
+    sender: "ai",
+    text: "Hello! 👋\nI'm InfinityAI, your personal shopping assistant.\nWhat would you like to shop for today?",
+    time: "10:24 AM",
+    products: [],
+    upsellPitch: null,
+    suggestedFollowUpQueries: [
+      "Laptops",
+      "Smartphones",
+      "Headphones",
+      "Today's Deals",
+      "Browse All"
+    ]
+  };
+  const [aiMessages, setAiMessages] = useState([defaultAiWelcomeMessage]);
 
   // Sync to LocalStorage
   useEffect(() => {
@@ -375,6 +400,8 @@ export const ShopProvider = ({ children }) => {
         setSelectedSubCategory,
         searchQuery,
         setSearchQuery,
+        searchDidYouMean,
+        setSearchDidYouMean,
         activeTab,
         setActiveTab,
         filters,
@@ -408,7 +435,10 @@ export const ShopProvider = ({ children }) => {
         selectedOrder,
         setSelectedOrder,
         toastMessage,
-        showToast
+        showToast,
+        aiMessages,
+        setAiMessages,
+        defaultAiWelcomeMessage
       }}
     >
       {children}

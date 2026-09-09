@@ -9,6 +9,8 @@ export const ProductGrid = () => {
     selectedCategory, 
     selectedSubCategory, 
     searchQuery, 
+    setSearchQuery,
+    searchDidYouMean,
     filters, 
     setFilters, 
     resetFilters,
@@ -63,6 +65,22 @@ export const ProductGrid = () => {
           </div>
         </div>
       </div>
+
+      {/* Did You Mean Suggestion Banner */}
+      {searchDidYouMean && searchQuery && searchDidYouMean.toLowerCase() !== searchQuery.toLowerCase().trim() && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-3 px-4 flex items-center justify-between text-xs text-amber-900 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-amber-800">Did you mean:</span>
+            <button
+              onClick={() => setSearchQuery(searchDidYouMean)}
+              className="font-bold underline text-indigo-700 hover:text-indigo-900 cursor-pointer bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-xs hover:shadow-sm transition-all"
+            >
+              "{searchDidYouMean}"
+            </button>
+            <span className="text-amber-700/90 hidden sm:inline">Showing closest matching products from our catalog.</span>
+          </div>
+        </div>
+      )}
 
       {/* 2. Products Grid (Responsive 2 cols on mobile, 3 on md, 4 on xl) */}
       {filteredProducts.length > 0 ? (

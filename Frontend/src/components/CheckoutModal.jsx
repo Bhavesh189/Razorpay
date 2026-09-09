@@ -67,7 +67,7 @@ export const CheckoutModal = () => {
 
   // New address form state
   const [newAddr, setNewAddr] = useState({
-    name: user.name || "Bhavey Sharma",
+    name: user.name || "Bhavesh Sharma",
     phone: user.phone || "9876543210",
     houseNo: "",
     roadName: "",
@@ -187,8 +187,8 @@ export const CheckoutModal = () => {
         },
 
         prefill: {
-          name: selectedAddress?.name || user.name || 'Bhavey Sharma',
-          email: 'bhavey@infinitystore.in',
+          name: selectedAddress?.name || user.name || 'Bhavesh Sharma',
+          email: 'bhavesh@infinitystore.in',
           contact: selectedAddress?.phone || user.phone || '9876543210'
         },
 

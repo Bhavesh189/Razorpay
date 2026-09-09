@@ -30,5 +30,21 @@ export const couponsData = [
     minOrder: 499,
     description: "15% OFF on fashion & electronics",
     tag: "Weekend Blowout"
+  },
+  {
+    code: "VIP100",
+    discountPercent: 0,
+    flatDiscount: 100,
+    minOrder: 499,
+    description: "Exclusive AI Personal Shopper VIP ₹100 Discount",
+    tag: "AI VIP Loyalty"
+  },
+  {
+    code: "VIPGAME50",
+    discountPercent: 0,
+    flatDiscount: 50,
+    minOrder: 299,
+    description: "Special Gamer & Tech Enthusiast Perk",
+    tag: "Gamer VIP Perk"
   }
 ];

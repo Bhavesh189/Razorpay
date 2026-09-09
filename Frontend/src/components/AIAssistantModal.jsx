@@ -1,18 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useShop } from '../context/ShopContext';
-import { 
-  X, 
-  Sparkles, 
-  Send, 
-  Mic, 
-  MicOff, 
-  Bot, 
-  ShoppingBag, 
-  Eye, 
-  Star, 
-  Flame, 
-  Plus, 
-  Tag, 
+import {
+  X,
+  Sparkles,
+  Send,
+  Mic,
+  MicOff,
+  Paperclip,
+  Image as ImageIcon,
+  Camera,
+  CheckCheck,
+  Bot,
+  ShoppingBag,
+  Eye,
+  Star,
+  Flame,
+  Plus,
+  Tag,
   RefreshCw,
   Zap,
   TrendingUp,
@@ -21,6 +25,14 @@ import {
   CheckCircle2,
   Lock,
   Gamepad2,
+  Code2,
+  Briefcase,
+  GraduationCap,
+  Palette,
+  Laptop,
+  Smartphone,
+  Headphones,
+  LayoutGrid,
   Trash2,
   CreditCard,
   Check,
@@ -36,10 +48,40 @@ import {
   ArrowRight,
   Lightbulb,
   Layers,
-  PackagePlus
+  PackagePlus,
+  Brain,
+  Gift,
+  RotateCcw,
+  UserCheck,
+  BookmarkCheck,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { SafeImage } from './SafeImage';
 import confetti from 'canvas-confetti';
+
+// Modern SVG Infinity Icon
+export const InfinityIcon = ({ className = "w-5 h-5 text-white" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.228-8-5.096 0-5.096 8 0 8 5.095 0 7.133-8 12.228-8z" />
+  </svg>
+);
+
+// Helper to get category/option icon
+const getOptionIcon = (label = "") => {
+  const l = label.toLowerCase();
+  if (l.includes("game") || l.includes("gaming") || l.includes("esports")) return <Gamepad2 className="w-4 h-4 text-indigo-600" />;
+  if (l.includes("cod") || l.includes("program") || l.includes("dev")) return <Code2 className="w-4 h-4 text-blue-600" />;
+  if (l.includes("work") || l.includes("office") || l.includes("business")) return <Briefcase className="w-4 h-4 text-slate-700" />;
+  if (l.includes("study") || l.includes("student") || l.includes("college")) return <GraduationCap className="w-4 h-4 text-emerald-600" />;
+  if (l.includes("edit") || l.includes("video") || l.includes("design") || l.includes("creator")) return <Palette className="w-4 h-4 text-rose-500" />;
+  if (l.includes("laptop")) return <Laptop className="w-4 h-4 text-blue-500" />;
+  if (l.includes("phone") || l.includes("mobile")) return <Smartphone className="w-4 h-4 text-purple-500" />;
+  if (l.includes("headphone") || l.includes("audio") || l.includes("sound")) return <Headphones className="w-4 h-4 text-emerald-500" />;
+  if (l.includes("deal") || l.includes("offer") || l.includes("discount")) return <Tag className="w-4 h-4 text-rose-500" />;
+  if (l.includes("browse") || l.includes("all")) return <LayoutGrid className="w-4 h-4 text-slate-600" />;
+  return <Sparkles className="w-4 h-4 text-amber-500" />;
+};
 
 // Helper to render bold markdown (**text**) gracefully with styled spans
 const renderFormattedText = (text) => {
@@ -48,7 +90,7 @@ const renderFormattedText = (text) => {
   return parts.map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return (
-        <strong key={index} className="font-extrabold text-indigo-700 bg-indigo-50/90 px-1 py-0.5 rounded">
+        <strong key={index} className="font-bold text-indigo-900 bg-indigo-50/80 px-1 py-0.5 rounded">
           {part.slice(2, -2)}
         </strong>
       );
@@ -71,8 +113,7 @@ const TypewriterText = ({ text, isNew, onFinish, onTick }) => {
 
     let currentLength = 0;
     const totalLength = text.length;
-    // Dynamic typing speed: finishes smoothly within ~1.2s
-    const step = Math.max(2, Math.ceil(totalLength / 50));
+    const step = Math.max(3, Math.ceil(totalLength / 40));
 
     const interval = setInterval(() => {
       currentLength += step;
@@ -83,9 +124,8 @@ const TypewriterText = ({ text, isNew, onFinish, onTick }) => {
         if (onFinish) onFinish();
       } else {
         setDisplayedText(text.slice(0, currentLength));
-        if (onTick) onTick();
       }
-    }, 16);
+    }, 18);
 
     return () => clearInterval(interval);
   }, [text, isNew]);
@@ -102,16 +142,17 @@ const TypewriterText = ({ text, isNew, onFinish, onTick }) => {
   );
 };
 
-// Interactive Requirement Discovery & Custom Input Card with Interactive Budget Range Slider + Direct Input
-const RequirementCard = ({ questionnaire, onSubmit }) => {
+// Interactive Requirement Discovery Card with Pill Chips matching reference UI
+const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
   const [selectedOptions, setSelectedOptions] = useState([]);
   const [customInput, setCustomInput] = useState('');
-  const [budget, setBudget] = useState(5000);
+  const [budget, setBudget] = useState(50000);
   const [isBudgetActive, setIsBudgetActive] = useState(false);
 
   if (!questionnaire) return null;
 
   const toggleOption = (val) => {
+    if (isSubmitted) return;
     setSelectedOptions(prev => {
       if (prev.includes(val)) {
         return prev.filter(v => v !== val);
@@ -122,12 +163,14 @@ const RequirementCard = ({ questionnaire, onSubmit }) => {
   };
 
   const handleBudgetSliderChange = (e) => {
+    if (isSubmitted) return;
     const val = parseInt(e.target.value, 10);
     setBudget(val);
     setIsBudgetActive(true);
   };
 
   const handleBudgetInputChange = (e) => {
+    if (isSubmitted) return;
     const rawVal = e.target.value.replace(/\D/g, '');
     if (!rawVal) {
       setBudget('');
@@ -140,6 +183,7 @@ const RequirementCard = ({ questionnaire, onSubmit }) => {
   };
 
   const handlePresetBudget = (amount) => {
+    if (isSubmitted) return;
     if (amount === null) {
       setIsBudgetActive(false);
       setBudget('');
@@ -151,51 +195,59 @@ const RequirementCard = ({ questionnaire, onSubmit }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const parts = [];
-    if (selectedOptions.length > 0) {
-      parts.push(selectedOptions.join(", "));
-    }
-    if (customInput.trim()) {
-      parts.push(customInput.trim());
-    }
-    if (isBudgetActive && budget) {
-      parts.push(`Under ₹${budget}`);
-    }
-    if (parts.length === 0) return;
-    
-    onSubmit(parts.join(" | "));
+    if (isSubmitted) return;
+    if (selectedOptions.length === 0 && !customInput.trim() && !isBudgetActive) return;
+
+    const requirementsData = {
+      priorities: selectedOptions,
+      customRequirements: customInput.trim(),
+      budget: isBudgetActive && budget ? Number(budget) : null,
+      isBudgetActive: Boolean(isBudgetActive && budget)
+    };
+
+    onSubmit(requirementsData, questionnaire);
   };
 
   // Slider bounds
-  const minBudget = 200;
-  const maxBudget = 100000;
+  const minBudget = 500;
+  const maxBudget = 150000;
   const numericBudget = typeof budget === 'number' ? budget : minBudget;
   const sliderPercentage = Math.min(100, Math.max(0, ((numericBudget - minBudget) / (maxBudget - minBudget)) * 100));
 
   return (
-    <div className="w-full max-w-lg bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 text-white rounded-3xl p-4 sm:p-5 space-y-4 shadow-xl border border-indigo-500/30 ml-9 animate-in zoom-in-95">
-      <div className="flex items-center justify-between border-b border-indigo-800/60 pb-2.5">
+    <div className="w-full max-w-2xl bg-white border border-indigo-100 rounded-3xl p-4 sm:p-5 space-y-4 shadow-[0_4px_20px_rgba(84,66,246,0.06)] ml-0 sm:ml-12 animate-in zoom-in-95">
+
+      {/* Header Banner */}
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-400/30">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-300" />
+          <div className="w-7 h-7 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+            <SlidersHorizontal className="w-4 h-4" />
           </div>
-          <span className="text-xs font-black uppercase tracking-wider text-indigo-100 font-['Outfit']">
-            {questionnaire.title || "Specify Your Requirements & Budget"}
-          </span>
+          <div>
+            <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+              {questionnaire.title || "Select Your Preferences"}
+            </h4>
+            <p className="text-[11px] text-slate-500 font-normal">
+              Choose one or more requirements to customize your matches
+            </p>
+          </div>
         </div>
-        <span className="text-[10px] font-extrabold text-amber-300 bg-amber-500/20 border border-amber-400/30 px-2 py-0.5 rounded-full">
-          Custom Finder
-        </span>
+
+        {selectedOptions.length > 0 && (
+          <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{selectedOptions.length} Selected</span>
+          </span>
+        )}
       </div>
 
-      {/* 1. Selectable Option Chips (Tick The Correct) */}
+      {/* 1. Multi-Select MCQ Option Chips */}
       {questionnaire.options && questionnaire.options.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-[10px] font-bold text-indigo-200/70 uppercase tracking-wider flex items-center justify-between">
-            <span>1. Choose Specifications (Tick to Select):</span>
-            <span className="text-[9px] text-amber-300 font-semibold">{selectedOptions.length} selected</span>
-          </div>
-          <div className="grid grid-cols-1 gap-1.5">
+          <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+            <span>Features & Priorities</span>
+          </label>
+          <div className="flex flex-wrap gap-2 pt-0.5">
             {questionnaire.options.map((opt, idx) => {
               const optVal = opt.value || opt.label;
               const isSelected = selectedOptions.includes(optVal);
@@ -203,23 +255,23 @@ const RequirementCard = ({ questionnaire, onSubmit }) => {
                 <button
                   key={opt.id || idx}
                   type="button"
+                  disabled={isSubmitted}
                   onClick={() => toggleOption(optVal)}
-                  className={`w-full text-left p-2.5 rounded-xl border text-xs font-semibold transition-all flex items-center justify-between cursor-pointer ${
-                    isSelected 
-                      ? "bg-indigo-600/90 border-amber-400 text-white shadow-md ring-1 ring-amber-400/40" 
-                      : "bg-white/5 border-white/10 hover:bg-white/10 text-indigo-100"
-                  }`}
+                  className={`px-3.5 py-2 rounded-2xl border text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 cursor-pointer shadow-xs active:scale-95 ${isSelected
+                      ? "bg-gradient-to-r from-[#5442f6] to-[#7f52f8] text-white border-transparent shadow-md shadow-indigo-500/20 ring-2 ring-indigo-300"
+                      : "bg-slate-50/70 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/50 text-slate-700"
+                    } ${isSubmitted ? 'opacity-80 cursor-default' : ''}`}
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-4 h-4 rounded-md flex items-center justify-center text-[10px] border transition-colors ${
-                      isSelected ? "bg-amber-400 border-amber-300 text-indigo-950 font-black" : "border-white/30 bg-black/20"
-                    }`}>
-                      {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                    </div>
-                    <span>{opt.label}</span>
+                  <div className={`${isSelected ? 'text-white' : ''}`}>
+                    {getOptionIcon(opt.label)}
                   </div>
-                  {opt.desc && (
-                    <span className="text-[10px] text-indigo-300 font-normal hidden sm:inline">{opt.desc}</span>
+                  <span>{opt.label}</span>
+                  {isSelected ? (
+                    <div className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center ml-0.5">
+                      <Check className="w-3 h-3 text-white stroke-[3]" />
+                    </div>
+                  ) : (
+                    <span className="w-3.5 h-3.5 rounded-full border border-slate-300 ml-0.5 opacity-60" />
                   )}
                 </button>
               );
@@ -228,81 +280,93 @@ const RequirementCard = ({ questionnaire, onSubmit }) => {
         </div>
       )}
 
-      {/* 2. Interactive Budget Range Line Slider & Number Input */}
-      <div className="bg-black/30 border border-indigo-500/30 rounded-2xl p-3.5 space-y-3">
+      {/* 2. Interactive Budget Range & Filter (Collapsible/Clean) */}
+      <div className="bg-[#f8faff] border border-slate-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-            <Tag className="w-3 h-3 text-amber-400" />
-            <span>2. Set Max Budget (Optional):</span>
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+            <Tag className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Price Budget Limit (Optional):</span>
           </div>
-          {isBudgetActive && budget && (
-            <span className="text-[10px] font-black text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
-              Filtered: ≤ ₹{Number(budget).toLocaleString('en-IN')}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={isSubmitted}
+              onClick={() => setIsBudgetActive(!isBudgetActive)}
+              className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border transition-all cursor-pointer ${isBudgetActive
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                  : "bg-slate-100 border-slate-200 text-slate-500"
+                }`}
+            >
+              {isBudgetActive ? "Filter: Active" : "Filter: Off"}
+            </button>
+            {isBudgetActive && budget && (
+              <span className="text-xs font-black text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg">
+                ≤ ₹{Number(budget).toLocaleString('en-IN')}
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Sync Controls: Slider Line + Number Input */}
-        <div className="space-y-2.5">
-          {/* Dual Inputs */}
+        {/* Sync Controls: Slider + Direct Input */}
+        <div className="space-y-2">
           <div className="flex items-center gap-3">
-            {/* Range Slider Line */}
             <div className="flex-1 space-y-1">
               <input
                 type="range"
                 min={minBudget}
                 max={maxBudget}
-                step={500}
-                value={typeof budget === 'number' ? budget : 5000}
+                step={1000}
+                disabled={isSubmitted}
+                value={typeof budget === 'number' ? budget : 50000}
                 onChange={handleBudgetSliderChange}
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400 focus:outline-none"
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none"
                 style={{
-                  background: `linear-gradient(to right, #f59e0b 0%, #6366f1 ${sliderPercentage}%, #334155 ${sliderPercentage}%, #334155 100%)`
+                  background: `linear-gradient(to right, #5442f6 0%, #7f52f8 ${sliderPercentage}%, #e2e8f0 ${sliderPercentage}%, #e2e8f0 100%)`
                 }}
               />
-              <div className="flex justify-between text-[9px] text-slate-400 font-mono">
-                <span>₹200</span>
-                <span>₹50,000</span>
-                <span>₹1,00,000+</span>
+              <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                <span>₹500</span>
+                <span>₹75,000</span>
+                <span>₹1,50,000+</span>
               </div>
             </div>
 
-            {/* Direct Number Input Box */}
             <div className="w-28 flex-shrink-0">
               <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400">₹</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-indigo-600">₹</span>
                 <input
                   type="text"
+                  disabled={isSubmitted}
                   value={budget !== '' ? budget : ''}
                   onChange={handleBudgetInputChange}
                   placeholder="Budget"
-                  className="w-full bg-black/60 border border-amber-400/50 focus:border-amber-300 focus:bg-black/90 rounded-xl pl-6 pr-2 py-1.5 text-xs text-white font-mono font-bold focus:outline-none text-right shadow-inner"
+                  className="w-full bg-white border border-slate-300 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-300 rounded-xl pl-6 pr-2 py-1.5 text-xs text-slate-900 font-mono font-bold focus:outline-none text-right shadow-inner"
                 />
               </div>
             </div>
           </div>
 
-          {/* Quick Preset Budget Chips */}
-          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+          {/* Preset Budget Chips */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             {[
-              { label: "< ₹500", amount: 500 },
               { label: "< ₹1,000", amount: 1000 },
-              { label: "< ₹5,000", amount: 5000 },
-              { label: "< ₹25,000", amount: 25000 },
+              { label: "< ₹15,000", amount: 15000 },
               { label: "< ₹50,000", amount: 50000 },
-              { label: "Any Budget", amount: null }
+              { label: "< ₹80,000", amount: 80000 },
+              { label: "< ₹1,20,000", amount: 120000 },
+              { label: "Flexible Budget", amount: null }
             ].map((p, idx) => {
               const isSelected = (p.amount === null && !isBudgetActive) || (isBudgetActive && budget === p.amount);
               return (
                 <button
                   key={idx}
                   type="button"
+                  disabled={isSubmitted}
                   onClick={() => handlePresetBudget(p.amount)}
-                  className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer active:scale-95 ${
-                    isSelected
-                      ? "bg-amber-400 text-indigo-950 border-amber-300 font-extrabold shadow-xs"
-                      : "bg-white/5 border-white/10 hover:bg-white/10 text-indigo-200"
-                  }`}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer active:scale-95 ${isSelected
+                      ? "bg-indigo-600 text-white border-indigo-600 font-extrabold shadow-xs"
+                      : "bg-white border-slate-200 hover:bg-slate-50 text-slate-600"
+                    }`}
                 >
                   {p.label}
                 </button>
@@ -312,32 +376,35 @@ const RequirementCard = ({ questionnaire, onSubmit }) => {
         </div>
       </div>
 
-      {/* 3. Custom Requirement Text Input Box & Submit */}
-      <form onSubmit={handleSubmit} className="space-y-3 pt-1">
-        <div>
-          <label className="text-[10px] font-bold text-indigo-200/70 uppercase tracking-wider block mb-1">
-            3. Custom Text / Specific Feature (Optional):
-          </label>
-          <input
-            type="text"
-            value={customInput}
-            onChange={(e) => setCustomInput(e.target.value)}
-            placeholder={questionnaire.customPlaceholder || "e.g. 16GB RAM, Fast charging, Cotton fabric..."}
-            className="w-full bg-black/40 border border-indigo-400/30 focus:border-amber-400 focus:bg-black/60 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-400 focus:outline-none transition-all"
-          />
-        </div>
+      {/* 3. Custom Requirement Text Input & Submit Button */}
+      {!isSubmitted ? (
+        <form onSubmit={handleSubmit} className="space-y-3 pt-1">
+          <div className="relative">
+            <Sparkles className="w-4 h-4 text-indigo-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={customInput}
+              onChange={(e) => setCustomInput(e.target.value)}
+              placeholder={questionnaire.customPlaceholder || "Any specific brand, spec, or preference (e.g. ASUS, 16GB, OLED)..."}
+              className="w-full bg-slate-50/70 border border-slate-200 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 rounded-2xl pl-10 pr-4 py-2.5 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none shadow-xs transition-all"
+            />
+          </div>
 
-        {/* Submit Requirements Action Button */}
-        <button
-          type="submit"
-          disabled={selectedOptions.length === 0 && !customInput.trim() && !isBudgetActive}
-          className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 disabled:opacity-40 text-white font-extrabold text-xs py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-yellow-200" />
-          <span>Apply Requirements & Filter Products {isBudgetActive && budget ? `(≤ ₹${Number(budget).toLocaleString('en-IN')})` : ''} 🚀</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={selectedOptions.length === 0 && !customInput.trim() && !isBudgetActive}
+            className="w-full bg-gradient-to-r from-[#5442f6] via-[#6352f7] to-[#7f52f8] hover:opacity-95 disabled:opacity-40 text-white font-bold text-xs sm:text-sm py-3.5 rounded-2xl shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Find Best Matches {selectedOptions.length > 0 ? `(${selectedOptions.length} Selected)` : ''} 🚀</span>
+          </button>
+        </form>
+      ) : (
+        <div className="flex items-center justify-center gap-2 py-2 px-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 font-semibold">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <span>Requirements submitted! Matching products are displayed below.</span>
+        </div>
+      )}
     </div>
   );
 };
@@ -355,39 +422,150 @@ const loadRazorpaySDK = () => {
 };
 
 export const AIAssistantModal = () => {
-  const { 
-    activeModal, 
-    setActiveModal, 
+  const {
+    activeModal,
+    setActiveModal,
     cart,
     removeFromCart,
     updateCartQuantity,
     cartSummary,
-    addToCart, 
+    addToCart,
     setSelectedProduct,
     placeOrder,
     user,
     selectedAddress,
-    showToast 
+    applyCouponCode,
+    appliedCoupon,
+    showToast,
+    aiMessages: messages,
+    setAiMessages: setMessages,
+    defaultAiWelcomeMessage
   } = useShop();
 
   const [inputQuery, setInputQuery] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [voiceState, setVoiceState] = useState('idle'); // 'idle' | 'listening' | 'processing' | 'error'
+  const isListening = voiceState === 'listening';
+  const voiceSubmissionLockRef = useRef(false);
+  const recognitionRef = useRef(null);
+  const chatSessionIdRef = useRef(`sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
   const [isPaying, setIsPaying] = useState(false);
   const [campaignTime, setCampaignTime] = useState({ min: 14, sec: 35 });
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
 
-  // Audit Trail for money actions
-  const [auditTrail, setAuditTrail] = useState([]);
-  const [showAuditPanel, setShowAuditPanel] = useState(false);
+  // Multimodal Vision Image Upload State with WebP Compression
+  const fileInputRef = useRef(null);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isCompressingImage, setIsCompressingImage] = useState(false);
 
+  // Client-side WebP Image Compressor (maxDim: 1200px, quality: 0.85)
+  const compressImageToWebP = (file, maxDim = 1200, quality = 0.85) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error("Canvas context unavailable"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let webpData = canvas.toDataURL('image/webp', quality);
+        if (!webpData.startsWith('data:image/webp')) {
+          webpData = canvas.toDataURL('image/jpeg', quality);
+        }
+        resolve(webpData);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Failed to decode image file"));
+      };
+      img.src = objectUrl;
+    });
+  };
+
+  const handleImageSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast("Please select a valid image file (PNG, JPG, WEBP).");
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      showToast("Image is too large. Please select an image under 25MB.");
+      return;
+    }
+
+    try {
+      setIsCompressingImage(true);
+      const compressedWebP = await compressImageToWebP(file, 1200, 0.85);
+      setSelectedImage(compressedWebP);
+      setImagePreview(compressedWebP);
+      showToast("📸 Image compressed to WebP & attached!");
+    } catch (err) {
+      console.error("Image compression error:", err);
+      // Fallback to FileReader
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target.result;
+        setSelectedImage(base64);
+        setImagePreview(base64);
+        showToast("📸 Product image attached!");
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsCompressingImage(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+  };
+
+  // In-session User Persona & Learned Profile
+  const [userPersona, setUserPersona] = useState(() => ({
+    learnedInterests: [],
+    preferredBudget: "",
+    shopperPersona: "Smart Shopper",
+    totalConversations: 0,
+    unlockedCoupons: ["FIRST50", "VIP100"]
+  }));
+
+  // Ensure stale localStorage chat history is cleared
+  useEffect(() => {
+    try {
+      localStorage.removeItem('infinity_ai_chat_history');
+    } catch (e) { }
+  }, []);
+
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [submittedSessions, setSubmittedSessions] = useState(() => new Set());
+  const [expandedProducts, setExpandedProducts] = useState({});
+  const [expandedRelated, setExpandedRelated] = useState({});
+
+  // Internal logging for money actions
   const addAuditEntry = (entry) => {
-    const auditEntry = {
-      id: `audit-${Date.now()}`,
-      timestamp: new Date().toLocaleTimeString('en-IN'),
-      ...entry
-    };
-    setAuditTrail(prev => [auditEntry, ...prev]);
-    return auditEntry;
+    console.log(`[Infinity AI Security Log] [${new Date().toLocaleTimeString('en-IN')}]`, entry);
   };
 
   // Track messages that have finished typewriter animation
@@ -395,27 +573,21 @@ export const AIAssistantModal = () => {
   const markAnimated = (id) => {
     setAnimatedIds(prev => new Set([...prev, id]));
   };
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+  const chatContainerRef = useRef(null);
+  const messagesEndRef = useRef(null);
+
+  const isNearBottom = () => {
+    if (!chatContainerRef.current) return true;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    return scrollHeight - scrollTop - clientHeight < 200;
   };
 
-  const [messages, setMessages] = useState([
-    {
-      id: "msg-welcome",
-      sender: "ai",
-      text: "Hello! 🙏 I'm your **Infinity Agentic AI Commerce Advisor**!\n\nHere is how I can assist you:\n• 🎯 **Interactive Requirement Assessment** — I'll understand your exact use case & budget\n• 🔬 **Deep Specification Analysis** — Chipsets, fabric GSM, display refresh rates & reviews\n• 🛒 **Conversational Cart Control** — Add/remove items with intelligent recommendations\n• 💳 **In-App Razorpay Checkout** — 100% Encrypted instant payments\n• 📝 **Explainable Audit Trail** — Every monetary action logged with full traceability\n\n💡 **How can I help you today? Type your query below or pick a topic to get started:**",
-      products: [],
-      upsellPitch: null,
-      suggestedFollowUpQueries: [
-        "I want to buy a laptop 💻",
-        "5G Smartphones & Gadgets 📱",
-        "Men Oversized 220 GSM T-Shirts 👕",
-        "Show My Cart 🛒"
-      ]
+  const scrollToBottom = () => {
+    if (isNearBottom()) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  ]);
-
-  const messagesEndRef = useRef(null);
+  };
 
   // Campaign live countdown ticker
   useEffect(() => {
@@ -430,7 +602,9 @@ export const AIAssistantModal = () => {
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isNearBottom()) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, loading]);
 
   if (activeModal !== 'aiAssistant') return null;
@@ -556,7 +730,7 @@ export const AIAssistantModal = () => {
             try {
               confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
               setTimeout(() => confetti({ particleCount: 100, spread: 100, origin: { y: 0.5 } }), 300);
-            } catch {}
+            } catch { }
 
             // Post success confirmation in AI chat
             setMessages(prev => [
@@ -564,9 +738,9 @@ export const AIAssistantModal = () => {
               {
                 id: `ai-order-${Date.now()}`,
                 sender: "ai",
-                text: `🎉 **Order Confirmed & Payment Verified on Razorpay!**\n\n🆔 **Order ID**: #${placed.id}\n💳 **Razorpay Payment ID**: ${paymentId}\n💰 **Amount Paid**: ₹${cartSummary.finalAmount} (Saved ₹${cartSummary.totalSavings})\n🚚 **Estimated Delivery**: ${placed.estimatedDelivery}\n\n📝 **Audit Trail**: All money actions logged & verifiable. Tap the 🔍 button to review.\n\nA confirmation SMS and receipt has been sent to +91 ${selectedAddress?.phone || '9876543210'}. Thank you for shopping! 🌟`,
+                text: `🎉 **Order Confirmed & Payment Verified on Razorpay!**\n\n🆔 **Order ID**: #${placed.id}\n💳 **Razorpay Payment ID**: ${paymentId}\n💰 **Amount Paid**: ₹${cartSummary.finalAmount} (Saved ₹${cartSummary.totalSavings})\n🚚 **Estimated Delivery**: ${placed.estimatedDelivery}\n\nA confirmation SMS and receipt has been sent to +91 ${selectedAddress?.phone || '9876543210'}. Thank you for shopping with Infinity Store! 🌟`,
                 products: [],
-                suggestedFollowUpQueries: ["📝 Show Audit Trail", "Continue Shopping 🛍️"]
+                suggestedFollowUpQueries: ["Show My Orders 📦", "Continue Shopping 🛍️"]
               }
             ]);
 
@@ -583,7 +757,7 @@ export const AIAssistantModal = () => {
           setIsPaying(false);
         },
         prefill: {
-          name: selectedAddress?.name || user.name || "Bhavey Sharma",
+          name: selectedAddress?.name || user.name || "Bhavesh Sharma",
           email: "shopper@infinitystore.in",
           contact: selectedAddress?.phone || user.phone || "9876543210"
         },
@@ -682,9 +856,14 @@ export const AIAssistantModal = () => {
   };
 
   // ==================== SEND QUERY TO AGENT ====================
-  const handleSendQuery = async (queryText) => {
+  const handleSendQuery = async (queryText, sessionIdToMark, imageToSend) => {
     const textToSend = queryText || inputQuery;
-    if (!textToSend.trim() || loading) return;
+    const activeImage = imageToSend || selectedImage;
+    if ((!textToSend.trim() && !activeImage) || loading) return;
+
+    if (sessionIdToMark) {
+      setSubmittedSessions(prev => new Set([...prev, sessionIdToMark]));
+    }
 
     // Check for payment retry request
     if (textToSend.toLowerCase().includes("retry") && (textToSend.toLowerCase().includes("pay") || textToSend.toLowerCase().includes("razorpay"))) {
@@ -692,21 +871,17 @@ export const AIAssistantModal = () => {
       return;
     }
 
-    // Check for audit trail request
-    if (textToSend.toLowerCase().includes("audit") || textToSend.toLowerCase().includes("trail") || textToSend.toLowerCase().includes("log")) {
-      setShowAuditPanel(true);
-      setMessages(prev => [
-        ...prev,
-        { id: `user-${Date.now()}`, sender: "user", text: textToSend },
-        {
-          id: `ai-audit-${Date.now()}`,
-          sender: "ai",
-          text: `📝 **Audit Trail Panel** is now open! ✅\n\nYou can review every money action taken by the AI agent:\n• ✅ **Successful payments** with Razorpay Payment IDs\n• ❌ **Failed attempts** with error descriptions\n• 🚫 **Dismissed/cancelled** transactions\n• 🛒 **Cart modifications** (add/remove items)\n\nEvery action is **explainable**, **bounded**, and **gated** — no money moves without your explicit authorization on Razorpay.`,
-          products: [],
-          suggestedFollowUpQueries: ["Proceed to Checkout ⚡", "Continue Shopping 🛍️"]
-        }
-      ]);
+    // Check for VIP Coupon claim query
+    if (textToSend.toLowerCase().includes("claim vip") || textToSend.toLowerCase().includes("vip coupon") || textToSend.toLowerCase().includes("secret coupon") || textToSend.toLowerCase().includes("discount coupon")) {
+      handleClaimVIPCoupon("VIP100");
+    }
+
+    // Check for clear memory request
+    if (textToSend.toLowerCase().includes("clear memory") || textToSend.toLowerCase().includes("reset memory") || textToSend.toLowerCase().includes("memory reset")) {
+      handleClearMemory();
       setInputQuery("");
+      setSelectedImage(null);
+      setImagePreview(null);
       return;
     }
 
@@ -714,79 +889,329 @@ export const AIAssistantModal = () => {
     const newMsg = {
       id: userMessageId,
       sender: "user",
-      text: textToSend
+      text: textToSend || (activeImage ? "📸 Product image search request" : ""),
+      image: activeImage || null,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setMessages(prev => [...prev, newMsg]);
     setInputQuery("");
+    setSelectedImage(null);
+    setImagePreview(null);
+    setLoading(true);
+
+    const historyPayload = messages
+      .filter(m => !m.id.startsWith('msg-welcome'))
+      .slice(-8)
+      .map(m => ({
+        role: m.sender === 'user' ? 'user' : 'model',
+        text: typeof m.text === 'string' ? m.text : ''
+      }));
+
+    const cartPayload = cart.map(c => ({
+      id: c.product.id,
+      title: c.product.title,
+      category: c.product.category,
+      subCategory: c.product.subCategory,
+      price: c.product.price
+    }));
+
+    // Helper to process autonomous agent actions
+    const processAction = (action) => {
+      if (!action) return;
+      if (action.type === "REMOVE_FROM_CART") {
+        const targetKeyword = (action.target || "").toLowerCase();
+        const itemsToRemove = cart.filter(item => {
+          if (targetKeyword === "all") return true;
+          const title = item.product.title.toLowerCase();
+          const subCat = (item.product.subCategory || "").toLowerCase();
+          const cat = (item.product.category || "").toLowerCase();
+          return title.includes(targetKeyword) || subCat.includes(targetKeyword) || cat.includes(targetKeyword);
+        });
+
+        if (itemsToRemove.length > 0) {
+          itemsToRemove.forEach(item => removeFromCart(item.cartItemId));
+          addAuditEntry({
+            action: 'CART_ITEM_REMOVED',
+            status: 'success',
+            description: `AI Agent removed ${itemsToRemove.length} item(s) matching "${targetKeyword}" from cart.`
+          });
+          showToast(`🗑️ ${itemsToRemove.length} item(s) removed from cart!`);
+        } else if (cart.length > 0 && targetKeyword) {
+          removeFromCart(cart[cart.length - 1].cartItemId);
+          addAuditEntry({
+            action: 'CART_ITEM_REMOVED',
+            status: 'success',
+            description: `AI Agent removed last cart item (fuzzy match for "${targetKeyword}").`
+          });
+          showToast("🗑️ Item removed from cart!");
+        }
+      }
+
+      if (action.type === "INITIATE_CHECKOUT") {
+        addAuditEntry({
+          action: 'CHECKOUT_INTENT',
+          status: 'pending',
+          amount: cartSummary.finalAmount,
+          description: `AI Agent initiated checkout flow for ₹${cartSummary.finalAmount} (${cart.length} items). Awaiting user authorization on Razorpay.`
+        });
+      }
+    };
+
+    const aiMessageId = `ai-${Date.now()}`;
+    let streamedText = "";
+    let hasStreamStarted = false;
+
+    try {
+      // 1. Attempt SSE Streaming via POST /api/ai/chat/stream
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+      const streamRes = await fetch('/api/ai/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: textToSend || (activeImage ? "Find products in Infinity Store catalog matching this image" : ""),
+          image: activeImage,
+          history: historyPayload,
+          cartContext: cartPayload,
+          userProfile: userPersona,
+          sessionId: chatSessionIdRef.current
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (streamRes.ok && streamRes.body) {
+        const reader = streamRes.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        // Add placeholder streaming AI message
+        setMessages(prev => [
+          ...prev,
+          {
+            id: aiMessageId,
+            sender: "ai",
+            text: "",
+            isStreaming: true,
+            analyzedRequirements: null,
+            questionnaire: null,
+            products: [],
+            relatedProducts: [],
+            upsellPitch: null,
+            inChatCheckout: null,
+            campaign: null,
+            suggestedFollowUpQueries: []
+          }
+        ]);
+        hasStreamStarted = true;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+
+          for (const part of parts) {
+            const lines = part.split('\n');
+            let eventType = 'message';
+            let dataStr = '';
+
+            for (const line of lines) {
+              if (line.startsWith('event:')) {
+                eventType = line.replace('event:', '').trim();
+              } else if (line.startsWith('data:')) {
+                dataStr = line.replace('data:', '').trim();
+              }
+            }
+
+            if (!dataStr) continue;
+
+            try {
+              const data = JSON.parse(dataStr);
+
+              if (eventType === 'message') {
+                if (data.text) {
+                  streamedText += data.text;
+                  setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, text: streamedText } : m));
+                }
+              } else if (eventType === 'question') {
+                setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, questionnaire: data } : m));
+              } else if (eventType === 'products') {
+                const prods = Array.isArray(data) ? data : (data.products || []);
+                const relProds = data.relatedProducts || [];
+                setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, products: prods, relatedProducts: relProds } : m));
+              } else if (eventType === 'action') {
+                processAction(data);
+              } else if (eventType === 'done') {
+                if (data.updatedUserProfile) {
+                  setUserPersona(prev => ({ ...prev, ...data.updatedUserProfile }));
+                }
+                if (data.agentAction) {
+                  processAction(data.agentAction);
+                }
+                setMessages(prev => prev.map(m => m.id === aiMessageId ? {
+                  ...m,
+                  text: data.fullText || data.reply || streamedText,
+                  products: (data.products && data.products.length > 0) ? data.products : m.products,
+                  relatedProducts: (data.relatedProducts && data.relatedProducts.length > 0) ? data.relatedProducts : m.relatedProducts,
+                  questionnaire: data.questionnaire !== undefined ? data.questionnaire : m.questionnaire,
+                  inChatCheckout: data.inChatCheckout || m.inChatCheckout,
+                  suggestedFollowUpQueries: data.suggestedFollowUpQueries || m.suggestedFollowUpQueries,
+                  isStreaming: false
+                } : m));
+              } else if (eventType === 'error') {
+                console.warn('[AI Stream Server Error]:', data.error);
+              }
+            } catch (err) {
+              console.error('Failed to parse SSE JSON chunk:', err);
+            }
+          }
+        }
+
+        setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, isStreaming: false } : m));
+        return;
+      }
+      throw new Error("Stream endpoint returned non-200, falling back to standard AI chat");
+    } catch (streamErr) {
+      console.warn("SSE Streaming failed or unsupported, using standard JSON fallback:", streamErr.message);
+
+      if (hasStreamStarted) {
+        setMessages(prev => prev.filter(m => m.id !== aiMessageId));
+      }
+
+      // 2. Standard JSON Fallback
+      try {
+        const res = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: textToSend || (activeImage ? "Find products in Infinity Store catalog matching this image" : ""),
+            image: activeImage,
+            history: historyPayload,
+            cartContext: cartPayload,
+            userProfile: userPersona,
+            sessionId: chatSessionIdRef.current
+          })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          if (data.updatedUserProfile) {
+            setUserPersona(prev => ({
+              ...prev,
+              ...data.updatedUserProfile
+            }));
+          }
+
+          if (data.agentAction) {
+            processAction(data.agentAction);
+          }
+
+          setMessages(prev => [
+            ...prev,
+            {
+              id: `ai-${Date.now()}`,
+              sender: "ai",
+              text: data.reply || data.text || data.message || "",
+              analyzedRequirements: data.analyzedRequirements || null,
+              questionnaire: data.questionnaire || null,
+              products: data.products || [],
+              relatedProducts: data.relatedProducts || [],
+              upsellPitch: data.upsellPitch || null,
+              inChatCheckout: data.inChatCheckout || null,
+              campaign: data.campaign || null,
+              suggestedFollowUpQueries: data.suggestedFollowUpQueries || []
+            }
+          ]);
+        } else {
+          throw new Error(data.error || "Failed to fetch response");
+        }
+      } catch (fallbackErr) {
+        console.error("AI chat fallback error:", fallbackErr);
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `ai-err-${Date.now()}`,
+            sender: "ai",
+            text: `I have processed your query! Here are our best recommendations from our **100,000+ catalog**:`,
+            products: [],
+            upsellPitch: null,
+            suggestedFollowUpQueries: ["Show My Cart 🛒", "Proceed to Checkout ⚡"]
+          }
+        ]);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==================== SUBMIT QUESTIONNAIRE REQUIREMENTS ====================
+  const handleRequirementsSubmit = async (requirementsData, questionnaire) => {
+    if (loading) return;
+
+    const sessionId = questionnaire?.requirementSessionId || `sess-${Date.now()}`;
+    setSubmittedSessions(prev => new Set([...prev, sessionId]));
+
+    // Format human-friendly display text for the user chat bubble
+    const parts = [];
+    if (requirementsData.priorities?.length > 0) {
+      parts.push(requirementsData.priorities.join(", "));
+    }
+    if (requirementsData.customRequirements) {
+      parts.push(requirementsData.customRequirements);
+    }
+    if (requirementsData.isBudgetActive && requirementsData.budget) {
+      parts.push(`Under ₹${Number(requirementsData.budget).toLocaleString('en-IN')}`);
+    }
+    const displayText = parts.length > 0 ? parts.join(" | ") : "Custom Requirements Applied";
+
+    const userMessageId = `user-${Date.now()}`;
+    const newMsg = {
+      id: userMessageId,
+      sender: "user",
+      text: displayText
+    };
+
+    setMessages(prev => [...prev, newMsg]);
     setLoading(true);
 
     try {
-      // Pass conversation history and cart context to backend AI service
       const historyPayload = messages
-        .filter(m => m.id !== 'msg-welcome')
+        .filter(m => !m.id.startsWith('msg-welcome'))
         .slice(-8)
         .map(m => ({
           role: m.sender === 'user' ? 'user' : 'model',
           text: typeof m.text === 'string' ? m.text : ''
         }));
 
-      const res = await fetch('/api/ai/chat', {
+      const res = await fetch('/api/ai/requirements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query: textToSend,
+        body: JSON.stringify({
+          sessionId: chatSessionIdRef.current || sessionId,
+          requirementSessionId: sessionId,
+          category: questionnaire?.category || "Laptops & Computers",
+          requirements: requirementsData,
           history: historyPayload,
-          cartContext: cart.map(c => ({ id: c.product.id, title: c.product.title, category: c.product.category, subCategory: c.product.subCategory, price: c.product.price }))
+          cartContext: cart.map(c => ({ id: c.product.id, title: c.product.title, category: c.product.category, subCategory: c.product.subCategory, price: c.product.price })),
+          userProfile: userPersona
         })
       });
 
       const data = await res.json();
 
       if (data.success) {
-        // EXECUTE AGENT AUTONOMOUS ACTIONS
-        if (data.agentAction) {
-          const action = data.agentAction;
-
-          // 1. REMOVE FROM CART ACTION
-          if (action.type === "REMOVE_FROM_CART") {
-            const targetKeyword = (action.target || "").toLowerCase();
-            const itemsToRemove = cart.filter(item => {
-              if (targetKeyword === "all") return true;
-              const title = item.product.title.toLowerCase();
-              const subCat = (item.product.subCategory || "").toLowerCase();
-              const cat = (item.product.category || "").toLowerCase();
-              return title.includes(targetKeyword) || subCat.includes(targetKeyword) || cat.includes(targetKeyword);
-            });
-
-            if (itemsToRemove.length > 0) {
-              itemsToRemove.forEach(item => removeFromCart(item.cartItemId));
-              addAuditEntry({
-                action: 'CART_ITEM_REMOVED',
-                status: 'success',
-                description: `AI Agent removed ${itemsToRemove.length} item(s) matching "${targetKeyword}" from cart.`
-              });
-              showToast(`🗑️ ${itemsToRemove.length} item(s) removed from cart!`);
-            } else if (cart.length > 0 && targetKeyword) {
-              removeFromCart(cart[cart.length - 1].cartItemId);
-              addAuditEntry({
-                action: 'CART_ITEM_REMOVED',
-                status: 'success',
-                description: `AI Agent removed last cart item (fuzzy match for "${targetKeyword}").`
-              });
-              showToast("🗑️ Item removed from cart!");
-            }
-          }
-          
-          // 2. INITIATE CHECKOUT ACTION
-          if (action.type === "INITIATE_CHECKOUT") {
-            addAuditEntry({
-              action: 'CHECKOUT_INTENT',
-              status: 'pending',
-              amount: cartSummary.finalAmount,
-              description: `AI Agent initiated checkout flow for ₹${cartSummary.finalAmount} (${cart.length} items). Awaiting user authorization on Razorpay.`
-            });
-          }
+        if (data.updatedUserProfile) {
+          setUserPersona(prev => ({
+            ...prev,
+            ...data.updatedUserProfile
+          }));
         }
 
         setMessages(prev => [
@@ -794,7 +1219,8 @@ export const AIAssistantModal = () => {
           {
             id: `ai-${Date.now()}`,
             sender: "ai",
-            text: data.reply,
+            text: data.reply || data.text || data.message || "",
+            analyzedRequirements: data.analyzedRequirements || null,
             questionnaire: data.questionnaire || null,
             products: data.products || [],
             relatedProducts: data.relatedProducts || [],
@@ -805,16 +1231,16 @@ export const AIAssistantModal = () => {
           }
         ]);
       } else {
-        throw new Error(data.error || "Failed to fetch response");
+        throw new Error(data.error || "Failed to process requirements");
       }
     } catch (err) {
-      console.error("AI chat error:", err);
+      console.error("Requirements submission error:", err);
       setMessages(prev => [
         ...prev,
         {
           id: `ai-err-${Date.now()}`,
           sender: "ai",
-          text: `Your query has been processed! Here are the best matches curated from our **100,000+ catalog**:`,
+          text: "I have processed your requirements! Here are the best matches from our catalog:",
           products: [],
           upsellPitch: null,
           suggestedFollowUpQueries: ["Show My Cart 🛒", "Proceed to Checkout ⚡"]
@@ -825,42 +1251,117 @@ export const AIAssistantModal = () => {
     }
   };
 
-  // Web Speech API Voice Search
+  // Clear Long-Term Local Browser Memory & Reset AI Session
+  const handleClearMemory = () => {
+    try {
+      localStorage.removeItem('infinity_ai_chat_history');
+      localStorage.removeItem('infinity_ai_user_persona');
+    } catch (e) { }
+    const freshPersona = {
+      learnedInterests: [],
+      preferredBudget: "",
+      shopperPersona: "Smart Shopper",
+      totalConversations: 0,
+      unlockedCoupons: ["FIRST50", "VIP100"]
+    };
+    setUserPersona(freshPersona);
+    setMessages([
+      {
+        ...defaultWelcomeMessage,
+        id: `msg-welcome-${Date.now()}`,
+        text: "🧠 **AI Memory & Chat History Reset!**\n\nYour profile has been refreshed to clean state. What would you like to explore today? 🛍️"
+      }
+    ]);
+    showToast("🧠 AI Memory & History reset!");
+  };
+
+  // Claim VIP Secret Coupon
+  const handleClaimVIPCoupon = (couponCode = "VIP100") => {
+    try {
+      confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+    } catch { }
+    const res = applyCouponCode(couponCode);
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `ai-coupon-${Date.now()}`,
+        sender: "ai",
+        text: `🎉 **VIP Secret Coupon Unlocked!**\n\nCode **"${couponCode}"** (Flat ₹100 OFF) is now active on your order!\n\n${res?.message || 'Discount applied for your 1-Click Razorpay checkout.'}\n\nReview your cart and pay securely whenever ready! ⚡`,
+        products: [],
+        suggestedFollowUpQueries: ["Show My Cart 🛒", "Proceed to Razorpay Checkout ⚡", "Continue Shopping 🛍️"]
+      }
+    ]);
+    showToast(`🎁 VIP Coupon ${couponCode} Claimed!`);
+  };
+
+  // Web Speech API Voice Search with Idle, Listening, Processing, Error states
   const handleToggleVoice = () => {
     if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      setVoiceState('error');
       showToast("Voice input is not supported in this browser. Please type your query.");
+      setTimeout(() => setVoiceState('idle'), 3000);
       return;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (voiceState === 'listening') {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+      setVoiceState('idle');
+      return;
+    }
+
     const recognition = new SpeechRecognition();
-    recognition.lang = 'en-IN';
+    recognitionRef.current = recognition;
+    recognition.lang = 'en-IN'; // Robust support for Indian English, Hindi & Hinglish
     recognition.continuous = false;
     recognition.interimResults = false;
+    voiceSubmissionLockRef.current = false;
 
-    if (!isListening) {
-      setIsListening(true);
+    setVoiceState('listening');
+    showToast("🎙️ Listening... Speak your shopping request in English or Hindi");
+
+    recognition.onresult = (event) => {
+      if (voiceSubmissionLockRef.current) return;
+      voiceSubmissionLockRef.current = true;
+
+      const transcript = event.results?.[0]?.[0]?.transcript || '';
+      if (!transcript.trim()) {
+        setVoiceState('idle');
+        return;
+      }
+
+      setVoiceState('processing');
+      setInputQuery(transcript);
+      showToast(`🎙️ Voice heard: "${transcript}"`);
+
+      handleSendQuery(transcript).finally(() => {
+        setVoiceState('idle');
+        voiceSubmissionLockRef.current = false;
+      });
+    };
+
+    recognition.onerror = (event) => {
+      console.warn("Speech recognition error:", event.error);
+      setVoiceState('error');
+      showToast("Mic error or permission denied. Please try again or type.");
+      setTimeout(() => setVoiceState('idle'), 2500);
+    };
+
+    recognition.onend = () => {
+      if (voiceState === 'listening') {
+        setVoiceState('idle');
+      }
+    };
+
+    try {
       recognition.start();
-      showToast("Listening... Start speaking now");
-
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setInputQuery(transcript);
-        setIsListening(false);
-        handleSendQuery(transcript);
-      };
-
-      recognition.onerror = () => {
-        setIsListening(false);
-        showToast("Mic error. Please try again or type.");
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-    } else {
-      recognition.stop();
-      setIsListening(false);
+    } catch (err) {
+      console.warn("Recognition start error:", err);
+      setVoiceState('error');
+      setTimeout(() => setVoiceState('idle'), 2000);
     }
   };
 
@@ -955,121 +1456,172 @@ export const AIAssistantModal = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-md overflow-hidden animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-4xl w-full h-[94vh] sm:h-[88vh] flex flex-col shadow-2xl border border-indigo-100 overflow-hidden relative">
-        
-        {/* 1. LUXURY HEADER */}
-        <div className="bg-gradient-to-r from-[#3730a3] via-[#4338ca] to-[#6d28d9] p-4 text-white flex items-center justify-between flex-shrink-0 shadow-md">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isFullScreen ? 'p-0' : 'p-2 sm:p-4'} bg-slate-950/70 backdrop-blur-md overflow-hidden animate-in fade-in duration-200`}>
+      <div className={`bg-white ${isFullScreen ? 'w-full h-full rounded-none max-w-none border-none' : 'rounded-[32px] max-w-3xl w-full h-[92vh] sm:h-[86vh] border-2 border-indigo-100/60 shadow-2xl shadow-indigo-950/20'} flex flex-col overflow-hidden relative transition-all duration-300`}>
+
+        {/* 1. HEADER (MATCHING SCREENSHOT) */}
+        <div className="bg-gradient-to-r from-[#5442f6] via-[#6352f7] to-[#7f52f8] px-5 py-4 text-white flex items-center justify-between flex-shrink-0 shadow-md">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner">
-              <Sparkles className="w-5 h-5 text-amber-300 animate-spin" />
+            <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner">
+              <InfinityIcon className="w-6 h-6 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black font-['Outfit'] tracking-tight">
-                  Infinity Agentic AI Commerce
-                </h2>
-                <span className="bg-emerald-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                  Agent 2.0
-                </span>
-              </div>
-              <p className="text-[11px] text-indigo-100 font-medium">
-                Catalog Search • Cart Control • Razorpay Checkout • Audit Trail
+              <h2 className="text-base sm:text-lg font-black tracking-tight flex items-center gap-1 leading-tight">
+                <span>Infinity</span>
+                <span className="text-indigo-200">AI</span>
+              </h2>
+              <p className="text-xs text-white/80 font-normal">
+                Your Shopping Assistant
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Audit Trail Toggle */}
-            <button
-              onClick={() => setShowAuditPanel(!showAuditPanel)}
-              className={`p-2 rounded-xl transition-all cursor-pointer ${
-                showAuditPanel 
-                  ? "bg-amber-500 text-white" 
-                  : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white"
-              }`}
-              title="Toggle Audit Trail"
-            >
-              <FileText className="w-4 h-4" />
-            </button>
-            <div className="hidden sm:flex items-center gap-1.5 bg-black/20 px-3 py-1.5 rounded-xl border border-white/20 text-xs text-amber-300 font-bold">
-              <Clock className="w-3.5 h-3.5" />
-              <span>Deal Ends: {campaignTime.min}:{campaignTime.sec < 10 ? `0${campaignTime.sec}` : campaignTime.sec}</span>
+          <div className="flex items-center gap-2.5">
+            {/* Status Badge */}
+            <div className="bg-white/15 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-white flex items-center gap-1.5 border border-white/20">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Online</span>
             </div>
+
+            {/* AI Memory Toggle (Small Subtle Button) */}
+            <button
+              onClick={() => setShowMemoryPanel(!showMemoryPanel)}
+              className={`p-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${showMemoryPanel || (userPersona?.learnedInterests?.length > 0)
+                  ? "bg-white/30 text-white"
+                  : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white"
+                }`}
+              title="AI Long-Term Browser Memory Profile"
+            >
+              <Brain className="w-4 h-4" />
+            </button>
+
+            {/* Full Screen Mode Toggle */}
+            <button
+              onClick={() => setIsFullScreen(!isFullScreen)}
+              className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/20 transition-all cursor-pointer"
+              title={isFullScreen ? "Exit Full Screen" : "Expand Full Screen"}
+            >
+              {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+
+            {/* Close Button */}
             <button
               onClick={() => setActiveModal(null)}
-              className="p-2 rounded-full text-white/80 hover:text-white hover:bg-white/20 transition-all cursor-pointer"
+              className="p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/20 transition-all cursor-pointer ml-0.5"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* 2. CAMPAIGN ORCHESTRATOR BANNER */}
-        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-indigo-600 px-4 py-1.5 text-white text-xs font-bold flex items-center justify-between flex-shrink-0 shadow-inner">
-          <div className="flex items-center gap-1.5 truncate">
-            <Zap className="w-3.5 h-3.5 text-yellow-200 animate-bounce flex-shrink-0" />
-            <span className="truncate">⚡ Flash Midnight Festival: Flat ₹50 OFF with Code <strong>FIRST50</strong> + 100% Free PAN-India Delivery</span>
+        {/* 2. OPTIONAL AI MEMORY PANEL (Collapsible) */}
+        {showMemoryPanel && (
+          <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-900 border-b border-indigo-700/60 p-3 sm:px-5 sm:py-2.5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-md animate-in slide-in-from-top-2 flex-shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Brain className="w-4 h-4 text-amber-300" />
+              <div className="text-xs">
+                <span className="font-bold text-amber-300 mr-2">Learned Profile:</span>
+                <span className="text-indigo-200">
+                  {userPersona.learnedInterests?.join(", ") || "Learning preferences as you chat..."}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => handleClaimVIPCoupon("VIP100")}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-2 py-1 rounded-lg"
+              >
+                VIP ₹100 🎁
+              </button>
+              <button
+                onClick={handleClearMemory}
+                className="bg-white/10 hover:bg-rose-600 text-white text-[10px] font-bold p-1.5 rounded-lg"
+                title="Reset Memory"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-          <span className="text-[10px] bg-black/30 px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0">
-            Live
-          </span>
-        </div>
+        )}
 
         {/* MAIN CONTENT AREA */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden bg-[#f8faff]">
 
           {/* 3. CHAT STREAM (MESSAGES) */}
-          <div className={`flex-1 overflow-y-auto p-3 sm:p-5 space-y-4 bg-slate-50/60 no-scrollbar ${showAuditPanel ? 'hidden sm:block' : ''}`}>
+          <div
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#f8faff] no-scrollbar"
+          >
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex flex-col ${msg.sender === "user" ? "items-end" : "items-start"} space-y-2`}
+                className={`flex flex-col ${msg.sender === "user" ? "items-end" : "items-start"} space-y-1.5`}
               >
-                {/* Message Bubble */}
-                <div className={`flex gap-2.5 max-w-[92%] sm:max-w-[85%] ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                  
-                  {/* AI / User Avatar */}
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold shadow-sm ${
-                    msg.sender === "user" 
-                      ? "bg-slate-900 text-white" 
-                      : "bg-gradient-to-tr from-indigo-600 to-purple-600 text-white"
-                  }`}>
-                    {msg.sender === "user" ? "You" : <Bot className="w-4 h-4" />}
-                  </div>
+                {/* Message Bubble Row */}
+                <div className={`flex gap-3 max-w-[92%] sm:max-w-[80%] ${msg.sender === "user" ? "flex-row-reverse" : "flex-row"}`}>
+
+                  {/* AI Avatar */}
+                  {msg.sender !== "user" && (
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-[#5442f6] to-[#7f52f8] flex items-center justify-center flex-shrink-0 text-white shadow-sm mt-0.5">
+                      <InfinityIcon className="w-5 h-5 text-white" />
+                    </div>
+                  )}
 
                   {/* Text Content */}
-                  <div className={`p-3.5 sm:p-4 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-sm ${
-                    msg.sender === "user"
-                      ? "bg-indigo-600 text-white rounded-tr-none font-medium"
-                      : "bg-white text-slate-800 rounded-tl-none border border-slate-200/90"
-                  }`}>
-                    {msg.sender === "user" ? (
-                      <div className="whitespace-pre-line space-y-1">
-                        {renderFormattedText(msg.text)}
+                  <div className="flex flex-col">
+                    {/* User Uploaded Image Preview in chat */}
+                    {msg.image && (
+                      <div className="mb-1.5 overflow-hidden rounded-2xl border border-indigo-200/80 shadow-md max-w-[240px] bg-slate-100">
+                        <img src={msg.image} alt="Uploaded product" className="w-full h-auto max-h-48 object-cover hover:scale-105 transition-transform" />
                       </div>
-                    ) : (
-                      <TypewriterText 
-                        text={msg.text} 
-                        isNew={!animatedIds.has(msg.id)} 
-                        onFinish={() => markAnimated(msg.id)}
-                        onTick={scrollToBottom}
-                      />
                     )}
+
+                    <div className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${msg.sender === "user"
+                        ? "bg-gradient-to-r from-[#5442f6] to-[#6352f7] text-white rounded-tr-[4px] font-medium"
+                        : "bg-white text-slate-800 rounded-tl-[4px] border border-slate-100"
+                      }`}>
+                      {msg.sender === "user" ? (
+                        <div className="whitespace-pre-line space-y-1">
+                          {renderFormattedText(msg.text)}
+                        </div>
+                      ) : msg.isStreaming ? (
+                        <div className="whitespace-pre-line space-y-1">
+                          {renderFormattedText(msg.text)}
+                          <span className="inline-block w-1.5 h-4 ml-1 bg-gradient-to-t from-indigo-600 to-purple-600 animate-pulse align-middle rounded-xs shadow-xs" />
+                        </div>
+                      ) : (
+                        <TypewriterText
+                          text={msg.text}
+                          isNew={!animatedIds.has(msg.id)}
+                          onFinish={() => markAnimated(msg.id)}
+                          onTick={scrollToBottom}
+                        />
+                      )}
+                    </div>
+
+                    {/* Timestamp below bubble */}
+                    <div className={`text-[10px] text-slate-400 font-normal mt-1 flex items-center gap-1 ${msg.sender === "user" ? "justify-end pr-1" : "pl-1"
+                      }`}>
+                      <span>{msg.time || "10:24 AM"}</span>
+                      {msg.sender === "user" && (
+                        <CheckCheck className="w-3.5 h-3.5 text-blue-500 inline" />
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* INTERACTIVE REQUIREMENT DISCOVERY / QUESTIONNAIRE CARD */}
+                {/* INTERACTIVE REQUIREMENT DISCOVERY PILLS */}
                 {msg.questionnaire && (
-                  <RequirementCard 
-                    questionnaire={msg.questionnaire} 
-                    onSubmit={handleSendQuery} 
+                  <RequirementCard
+                    questionnaire={msg.questionnaire}
+                    isSubmitted={submittedSessions.has(msg.questionnaire?.requirementSessionId)}
+                    onSubmit={(requirementsData, qObj) => handleRequirementsSubmit(requirementsData, qObj)}
                   />
                 )}
 
                 {/* IN-CHAT INTERACTIVE CART & CHECKOUT CARD */}
                 {(msg.inChatCheckout || msg.sender === "ai" && msg.text.includes("Shopping Cart")) && cart.length > 0 && (
-                  <div className="w-full max-w-lg bg-gradient-to-br from-indigo-50 via-white to-purple-50 border-2 border-indigo-200 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-md ml-9 animate-in zoom-in-95">
+                  <div className="w-full max-w-lg bg-gradient-to-br from-indigo-50/90 via-white to-purple-50/90 border-2 border-indigo-200/80 rounded-3xl p-4 sm:p-5 space-y-3.5 shadow-md ml-11 animate-in zoom-in-95">
                     <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5">
                       <div className="flex items-center gap-2">
                         <ShoppingBag className="w-4 h-4 text-indigo-600" />
@@ -1119,12 +1671,6 @@ export const AIAssistantModal = () => {
                       </div>
                     </div>
 
-                    {/* Bounded & Gated Payment Notice */}
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-2 text-[10px] text-amber-800 flex items-start gap-1.5">
-                      <Shield className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
-                      <span><strong>Bounded & Gated:</strong> Payment will ONLY proceed after your explicit authorization on the official Razorpay popup. No auto-deduction.</span>
-                    </div>
-
                     {/* 1-Click Pay with Official Razorpay */}
                     <button
                       onClick={handleInChatRazorpayPayment}
@@ -1151,313 +1697,128 @@ export const AIAssistantModal = () => {
                   </div>
                 )}
 
-                {/* EXPLICIT PAYMENT RETRY CARD (WHEN PAYMENT FAILS OR IS DISMISSED) */}
-                {msg.retryPayment && (
-                  <div className="w-full max-w-lg bg-gradient-to-br from-rose-50 via-amber-50 to-rose-50 border-2 border-rose-200/90 rounded-3xl p-4 sm:p-5 ml-9 space-y-3 shadow-md animate-in zoom-in-95">
-                    <div className="flex items-center justify-between border-b border-rose-200 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce" />
-                        <span className="text-xs font-black uppercase tracking-wider text-rose-950 font-['Outfit']">
-                          Payment Retry Prompt
-                        </span>
+                {/* RECOMMENDED PRODUCT CARDS (HERO 2 + EXPANDER) */}
+                {!msg.questionnaire && msg.products && msg.products.length > 0 && (() => {
+                  const isExpanded = Boolean(expandedProducts[msg.id]);
+                  const visibleProducts = isExpanded ? msg.products : msg.products.slice(0, 2);
+                  return (
+                    <div className="w-full pl-11 space-y-2.5">
+                      <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Flame className="w-3.5 h-3.5 text-orange-500" />
+                          <span>Top Matched Recommendations ({isExpanded ? msg.products.length : Math.min(2, msg.products.length)} of {msg.products.length}):</span>
+                        </div>
                       </div>
-                      <span className="text-[10px] font-extrabold text-rose-700 bg-rose-100/90 px-2 py-0.5 rounded-full border border-rose-200">
-                        Cart Safe • ₹{msg.retryPayment.amount || cartSummary.finalAmount}
-                      </span>
-                    </div>
 
-                    <div className="bg-white/80 rounded-2xl p-3 border border-rose-100 space-y-1 text-xs text-rose-900">
-                      <div className="font-bold flex items-center gap-1 text-rose-800">
-                        <span>Reason:</span>
-                        <span className="font-normal">{msg.retryPayment.reason || 'Transaction could not be completed.'}</span>
-                      </div>
-                      <div className="text-[11px] text-slate-600">
-                        🛡️ Zero money was deducted. Your {cart.length} cart items and delivery address are safely saved.
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 pt-1">
-                      <button
-                        onClick={handleInChatRazorpayPayment}
-                        disabled={isPaying}
-                        className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600 hover:from-indigo-700 hover:to-rose-700 text-white font-extrabold text-xs sm:text-sm py-3.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                      >
-                        {isPaying ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Re-opening Razorpay Modal...</span>
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="w-4 h-4" />
-                            <span>Retry Payment with Razorpay (₹{msg.retryPayment.amount || cartSummary.finalAmount}) ⚡</span>
-                          </>
-                        )}
-                      </button>
-
-                      <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>100% Secure • Official Razorpay UPI & Cards Gateway</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* RECOMMENDED PRODUCT CARDS (GRID VIEW) - ONLY SHOW ONCE REQUIREMENTS ARE FINALIZED */}
-                {!msg.questionnaire && msg.products && msg.products.length > 0 && (
-                  <div className="w-full pl-9 space-y-2.5">
-                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                      <Flame className="w-3.5 h-3.5 text-orange-500" />
-                      Agent-Curated Recommendations ({msg.products.length} Items):
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {msg.products.map((prod) => (
-                        <div
-                          key={prod.id}
-                          className="bg-white border border-slate-200 hover:border-indigo-400 rounded-2xl p-3 flex gap-3 shadow-sm hover:shadow-md transition-all group"
-                        >
-                          {/* Image */}
-                          <div 
-                            onClick={() => handleWatchProduct(prod)}
-                            className="w-20 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer relative"
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {visibleProducts.map((prod) => (
+                          <div
+                            key={prod.id}
+                            className="bg-white border-2 border-indigo-100/90 hover:border-indigo-400 rounded-2xl p-3 flex flex-col justify-between shadow-xs hover:shadow-md transition-all group space-y-2 animate-in fade-in"
                           >
-                            <SafeImage
-                              src={prod.images[0]}
-                              alt={prod.title}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            />
-                            <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                              {prod.rating}★
-                            </span>
-                          </div>
-
-                          {/* Details & 3 Action Buttons */}
-                          <div className="flex-1 min-w-0 flex flex-col justify-between">
-                            <div>
-                              <h4 
+                            <div className="flex gap-3">
+                              <div
                                 onClick={() => handleWatchProduct(prod)}
-                                className="text-xs font-bold text-slate-900 line-clamp-1 cursor-pointer hover:text-indigo-600"
+                                className="w-20 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer relative"
                               >
-                                {prod.title}
-                              </h4>
-                              <div className="text-[10px] text-slate-500 mt-0.5 truncate">
-                                {prod.subCategory} • Free Delivery
+                                <SafeImage
+                                  src={prod.images[0]}
+                                  alt={prod.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                />
+                                <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                                  {prod.rating}★
+                                </span>
                               </div>
-                              
-                              {/* Price */}
-                              <div className="flex items-baseline gap-1.5 mt-1">
-                                <span className="text-sm font-black text-slate-900 font-['Outfit']">
-                                  ₹{prod.price}
-                                </span>
-                                <span className="text-[10px] text-slate-400 line-through">
-                                  ₹{prod.originalPrice}
-                                </span>
-                                <span className="text-[10px] font-bold text-emerald-600">
-                                  {prod.discount}% off
-                                </span>
+
+                              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                <div>
+                                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                                    <span className="text-[9px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded">
+                                      🎯 {prod.matchScore || "98% Match"}
+                                    </span>
+                                    <span className="text-[9px] text-emerald-600 font-extrabold truncate">
+                                      {prod.discount}% off
+                                    </span>
+                                  </div>
+                                  <h4
+                                    onClick={() => handleWatchProduct(prod)}
+                                    className="text-xs font-bold text-slate-900 line-clamp-2 cursor-pointer hover:text-indigo-600 leading-snug"
+                                  >
+                                    {prod.title}
+                                  </h4>
+                                </div>
+
+                                <div className="flex items-baseline gap-1.5 mt-1">
+                                  <span className="text-sm font-black text-slate-900 font-['Outfit']">
+                                    ₹{prod.price?.toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 line-through">
+                                    ₹{prod.originalPrice?.toLocaleString('en-IN')}
+                                  </span>
+                                </div>
                               </div>
                             </div>
 
-                            {/* 3 Action Buttons: Watch, Add, Buy */}
-                            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 mt-1">
+                            {prod.whyItMatches && (
+                              <div className="bg-indigo-50/70 border border-indigo-100/90 rounded-xl p-2 space-y-0.5">
+                                <p className="text-[11px] text-slate-700 font-medium leading-relaxed">
+                                  {prod.whyItMatches}
+                                </p>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-1.5 pt-1.5 border-t border-slate-100">
                               <button
                                 onClick={() => handleWatchProduct(prod)}
                                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                                title="View full product details"
                               >
-                                <Eye className="w-3 h-3" /> Watch
+                                <Eye className="w-3 h-3" /> View
                               </button>
 
                               <button
                                 onClick={() => handleAddProduct(prod)}
                                 className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                                title="Add to shopping cart"
                               >
                                 <Plus className="w-3 h-3" /> Add
                               </button>
 
                               <button
                                 onClick={() => handleBuyProduct(prod)}
-                                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-extrabold py-1.5 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                                title="Instant Checkout"
+                                className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-[10px] font-extrabold py-1.5 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1 cursor-pointer"
                               >
                                 <Zap className="w-3 h-3 text-amber-300" /> Buy
                               </button>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* RELATED PRODUCTS & COMPLEMENTARY ADD-ONS WITH "WHY BUY THIS SEPARATELY" RATIONALE */}
-                {!msg.questionnaire && msg.relatedProducts && msg.relatedProducts.length > 0 && (
-                  <div className="w-full pl-9 space-y-3 pt-1">
-                    <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-indigo-500/10 flex items-center justify-center border border-indigo-200 text-indigo-700">
-                          <Layers className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 font-['Outfit']">
-                            Essential Add-ons & Related Products ({msg.relatedProducts.length} Items)
-                          </h4>
-                          <p className="text-[10px] text-slate-500 font-medium">
-                            Carefully paired items to complete, protect & elevate your setup
-                          </p>
-                        </div>
+                        ))}
                       </div>
-                      <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                        Recommended Synergy
-                      </span>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {msg.relatedProducts.map((relProd) => (
-                        <div
-                          key={relProd.id}
-                          className="bg-white border-2 border-indigo-100/90 hover:border-indigo-400 rounded-2xl p-3.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-all space-y-2.5 group"
+                      {msg.products.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedProducts(prev => ({ ...prev, [msg.id]: !prev[msg.id] }))}
+                          className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-indigo-50 text-indigo-700 border border-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-2xs cursor-pointer mt-1"
                         >
-                          {/* Top Row: Image + Main Details */}
-                          <div className="flex gap-3">
-                            <div 
-                              onClick={() => handleWatchProduct(relProd)}
-                              className="w-20 h-24 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 cursor-pointer relative"
-                            >
-                              <SafeImage
-                                src={relProd.images[0]}
-                                alt={relProd.title}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                              />
-                              <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                                {relProd.rating}★
-                              </span>
-                            </div>
-
-                            <div className="flex-1 min-w-0 flex flex-col justify-between">
-                              <div>
-                                {relProd.benefitTag && (
-                                  <span className="inline-block text-[9px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md mb-1 border border-indigo-100">
-                                    ✨ {relProd.benefitTag}
-                                  </span>
-                                )}
-                                <h5 
-                                  onClick={() => handleWatchProduct(relProd)}
-                                  className="text-xs font-bold text-slate-900 line-clamp-2 cursor-pointer hover:text-indigo-600 leading-snug"
-                                >
-                                  {relProd.title}
-                                </h5>
-                              </div>
-
-                              {/* Price */}
-                              <div className="flex items-baseline gap-1.5 mt-1">
-                                <span className="text-sm font-black text-slate-900 font-['Outfit']">
-                                  ₹{relProd.price}
-                                </span>
-                                <span className="text-[10px] text-slate-400 line-through">
-                                  ₹{relProd.originalPrice}
-                                </span>
-                                <span className="text-[10px] font-bold text-emerald-600">
-                                  {relProd.discount}% off
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* "WHY YOU SHOULD ADD THIS SEPARATELY" REASONING BOX */}
-                          <div className="bg-gradient-to-r from-amber-50/90 to-orange-50/80 border border-amber-200/90 rounded-xl p-2.5 space-y-1">
-                            <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-800 uppercase tracking-wider">
-                              <Lightbulb className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 animate-pulse" />
-                              <span>Why Buy This Separately:</span>
-                            </div>
-                            <p className="text-[11px] text-slate-700 leading-relaxed font-medium">
-                              {relProd.whyBuy}
-                            </p>
-                          </div>
-
-                          {/* Action Buttons: Watch, Add to Cart, Buy Now */}
-                          <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100">
-                            <button
-                              onClick={() => handleWatchProduct(relProd)}
-                              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                              title="View full specifications"
-                            >
-                              <Eye className="w-3 h-3" /> Watch
-                            </button>
-
-                            <button
-                              onClick={() => handleAddProduct(relProd)}
-                              className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                              title="Add related product to cart"
-                            >
-                              <Plus className="w-3 h-3" /> Add
-                            </button>
-
-                            <button
-                              onClick={() => handleBuyProduct(relProd)}
-                              className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-[10px] font-extrabold py-2 rounded-lg shadow-xs transition-all flex items-center justify-center gap-1 cursor-pointer"
-                              title="Instant Checkout with Razorpay"
-                            >
-                              <Zap className="w-3 h-3 text-amber-300" /> Buy
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                          <span>{isExpanded ? "Show Top 2 Matches Only ▴" : `✨ View ${msg.products.length - 2} More Matches ▾`}</span>
+                        </button>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
-                {/* REVENUE UPSELL BOOSTER CARD */}
-                {msg.upsellPitch && (
-                  <div className="w-full max-w-lg bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-300/80 rounded-2xl p-3 sm:p-4 ml-9 space-y-2 shadow-sm animate-in zoom-in-95">
-                    <div className="flex items-center gap-1.5 text-xs font-black text-amber-800 uppercase tracking-wider">
-                      <TrendingUp className="w-4 h-4 text-amber-600" />
-                      Cross-Sell Agent • Revenue Booster ✨
-                    </div>
-                    <p className="text-xs text-slate-700 leading-relaxed">
-                      {msg.upsellPitch.pitchMessage || msg.upsellPitch.pitch}
-                    </p>
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs font-bold text-amber-900">
-                        Combo Addon: <strong>₹{msg.upsellPitch.price}</strong>
-                      </span>
-                      <button
-                        onClick={() => {
-                          addToCart({
-                            id: msg.upsellPitch.productId || `addon-${Date.now()}`,
-                            title: msg.upsellPitch.title || "Smart Recommended Addon",
-                            price: msg.upsellPitch.price || 249,
-                            originalPrice: (msg.upsellPitch.price || 249) * 2,
-                            discount: 50,
-                            images: ["https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=700&auto=format&fit=crop&q=80"]
-                          });
-                          addAuditEntry({
-                            action: 'UPSELL_ACCEPTED',
-                            status: 'success',
-                            description: `User accepted cross-sell: "${msg.upsellPitch.title}" at ₹${msg.upsellPitch.price}. Revenue boosted.`
-                          });
-                          showToast("✨ Combo deal added to cart!");
-                        }}
-                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm transition-all flex items-center gap-1 cursor-pointer active:scale-95"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add Combo Deal
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* FOLLOW-UP SUGGESTIONS PILLS */}
+                {/* FOLLOW-UP ACTION CHIPS (MATCHING SCREENSHOT) */}
                 {msg.suggestedFollowUpQueries && msg.suggestedFollowUpQueries.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pl-9 pt-1">
+                  <div className="flex flex-wrap gap-2 pl-11 pt-1">
                     {msg.suggestedFollowUpQueries.map((query, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleSendQuery(query)}
-                        className="text-[11px] font-semibold bg-white hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-full transition-all shadow-2xs hover:border-indigo-300 active:scale-95 cursor-pointer"
+                        className="text-xs sm:text-sm font-semibold bg-white hover:bg-indigo-50/80 hover:text-indigo-700 text-slate-700 border border-slate-200/90 px-3.5 py-2 rounded-2xl transition-all shadow-xs hover:border-indigo-300 hover:shadow-sm active:scale-95 cursor-pointer flex items-center gap-2"
                       >
-                        {query}
+                        {getOptionIcon(query)}
+                        <span>{query}</span>
                       </button>
                     ))}
                   </div>
@@ -1468,246 +1829,124 @@ export const AIAssistantModal = () => {
 
             {/* Loading Indicator */}
             {loading && (
-              <div className="flex items-center gap-2 pl-9 text-xs text-indigo-600 font-bold animate-pulse py-2">
+              <div className="flex items-center gap-2 pl-11 text-xs text-indigo-600 font-bold animate-pulse py-2">
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>AI Agent scanning 100k+ catalog & computing recommendations...</span>
+                <span>Infinity AI is finding the best matches...</span>
               </div>
             )}
 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* 4. AUDIT TRAIL SIDE PANEL */}
-          {showAuditPanel && (
-            <div className="w-full sm:w-80 sm:min-w-[320px] border-l border-slate-200 bg-white flex flex-col overflow-hidden flex-shrink-0">
-              <div className="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-indigo-600" />
-                  <span className="text-xs font-black text-slate-900 uppercase tracking-wider">Audit Trail</span>
-                  <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full">{auditTrail.length}</span>
-                </div>
-                <button onClick={() => setShowAuditPanel(false)} className="p-1 text-slate-400 hover:text-slate-700 sm:hidden">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+        </div>
 
-              {/* Merchant Revenue Growth & Agentic Stats */}
-              <div className="p-3 bg-gradient-to-r from-indigo-900 to-purple-900 text-white border-b border-indigo-700/50 space-y-2">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-indigo-200 font-bold flex items-center gap-1">
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Merchant AI Growth
-                  </span>
-                  <span className="bg-emerald-500/20 text-emerald-300 font-extrabold px-1.5 py-0.5 rounded text-[9px] border border-emerald-400/30">
-                    +42% Uplift
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div className="bg-black/30 p-2 rounded-xl border border-white/10">
-                    <div className="text-[10px] text-indigo-300">AI Boosted Rev</div>
-                    <div className="text-xs font-black text-amber-300 font-['Outfit']">₹24,850</div>
-                  </div>
-                  <div className="bg-black/30 p-2 rounded-xl border border-white/10">
-                    <div className="text-[10px] text-indigo-300">Protocol Handshake</div>
-                    <div className="text-xs font-black text-emerald-400 font-['Outfit']">UAP / ACP 2.0</div>
-                  </div>
-                </div>
+        {/* 5. FLOATING INPUT FOOTER (MATCHING SCREENSHOT WITH BOTH IMAGE UPLOAD & MIC) */}
+        <div className="p-3 sm:p-4 bg-white border-t border-slate-100 flex-shrink-0">
+          {/* Image preview chip above input */}
+          {imagePreview && (
+            <div className="flex items-center gap-2.5 p-2 px-3 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200/80 rounded-2xl mb-2.5 w-fit shadow-xs animate-in fade-in slide-in-from-bottom-2">
+              <img src={imagePreview} alt="Attached" className="w-10 h-10 object-cover rounded-xl border border-indigo-200 shadow-xs" />
+              <div className="text-xs pr-1">
+                <p className="font-bold text-slate-900 flex items-center gap-1">
+                  <span>Product Image Attached</span>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                </p>
+                <p className="text-[10px] text-indigo-600 font-medium">Gemini will visually analyze & match catalog items</p>
               </div>
-
-              {/* Interactive Simulation & Test The Bar Action Buttons */}
-              <div className="p-2.5 bg-slate-100 border-b border-slate-200 space-y-1.5">
-                <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                  Test "The Bar" Protocols:
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      addAuditEntry({
-                        action: 'GATEWAY_FAILURE_HANDLED',
-                        status: 'error',
-                        amount: 2499,
-                        description: 'Simulated Razorpay Network Timeout (504 Gateway). Graceful rollback executed: Cart preserved, zero money deducted, retry link generated.',
-                        errorHandled: true
-                      });
-                      showToast("🧪 Simulation: Payment Gateway Timeout caught & handled gracefully. Cart safe!");
-                    }}
-                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold p-1.5 rounded-lg transition-all text-left flex items-center gap-1 cursor-pointer"
-                    title="Simulate payment gateway failure and verify graceful handling"
-                  >
-                    <AlertTriangle className="w-3 h-3 text-rose-600 flex-shrink-0" />
-                    <span className="truncate">Test Failure Recovery</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        showToast("🤖 Running Autonomous AI Buyer (ACP-2.0 Handshake)...");
-                        const res = await fetch('/api/agent/transact', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            buyerAgentId: "Autonomous-AI-Buyer-Bot-07",
-                            items: [{ sku: "prod-23", quantity: 2 }],
-                            couponCode: "FIRST50"
-                          })
-                        });
-                        const data = await res.json();
-                        if (data.success) {
-                          addAuditEntry({
-                            action: 'A2A_TRANSACT_SUCCESS',
-                            status: 'success',
-                            amount: data.explainableAudit.finalPayableINR,
-                            description: `Autonomous AI Buyer completed handshake (ACP-2.0). Bounded checks passed. Order created on Razorpay test mode for ₹${data.explainableAudit.finalPayableINR}.`
-                          });
-                          showToast("✅ AI Buyer completed end-to-end bounded transaction!");
-                        }
-                      } catch (err) {
-                        showToast("AI Buyer transaction simulation error.");
-                      }
-                    }}
-                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold p-1.5 rounded-lg transition-all text-left flex items-center gap-1 cursor-pointer"
-                    title="Run end-to-end autonomous AI Buyer transaction"
-                  >
-                    <Bot className="w-3 h-3 text-indigo-600 flex-shrink-0" />
-                    <span className="truncate">Simulate AI Buyer</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
-                {auditTrail.length === 0 ? (
-                  <div className="text-center py-8 text-xs text-slate-400 space-y-2">
-                    <Shield className="w-8 h-8 mx-auto text-slate-300 mb-1" />
-                    <p className="font-bold text-slate-700">Audit Trail Active</p>
-                    <p className="text-[11px]">Every money action is explainable, bounded by safety caps, and gated behind human authorization on Razorpay.</p>
-                  </div>
-                ) : (
-                  auditTrail.map((entry) => (
-                    <div key={entry.id} className={`p-2.5 rounded-xl border text-[11px] space-y-1 ${
-                      entry.status === 'success' ? 'bg-emerald-50 border-emerald-200' :
-                      entry.status === 'error' ? 'bg-rose-50 border-rose-200' :
-                      entry.status === 'cancelled' ? 'bg-amber-50 border-amber-200' :
-                      'bg-blue-50 border-blue-200'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <span className={`font-black uppercase tracking-wider text-[10px] ${
-                          entry.status === 'success' ? 'text-emerald-700' :
-                          entry.status === 'error' ? 'text-rose-700' :
-                          entry.status === 'cancelled' ? 'text-amber-700' :
-                          'text-blue-700'
-                        }`}>
-                          {entry.status === 'success' && '✅'} 
-                          {entry.status === 'error' && '❌'} 
-                          {entry.status === 'cancelled' && '🚫'} 
-                          {entry.status === 'pending' && '⏳'} 
-                          {' '}{entry.action.replace(/_/g, ' ')}
-                        </span>
-                        <span className="text-[9px] text-slate-500">{entry.timestamp}</span>
-                      </div>
-                      <p className="text-slate-700 leading-relaxed font-medium">{entry.description}</p>
-                      {entry.amount && (
-                        <div className="text-[10px] font-bold text-slate-900">Verified Amount: ₹{entry.amount}</div>
-                      )}
-                      {entry.paymentId && (
-                        <div className="text-[10px] font-mono text-indigo-600 truncate">Razorpay Pay ID: {entry.paymentId}</div>
-                      )}
-                      {entry.errorHandled && (
-                        <div className="flex items-center gap-1 text-[10px] text-emerald-700 font-bold bg-emerald-100/70 p-1 rounded-md">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>Failure Handled Gracefully • Zero Loss</span>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Audit Panel Footer */}
-              <div className="p-2.5 border-t border-slate-200 bg-slate-50 text-[10px] text-slate-600 flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Bounded & Gated</span>
-                </div>
-                <span className="text-indigo-600 font-bold font-mono">UAP / ACP-2.0</span>
-              </div>
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                className="p-1.5 rounded-full bg-white text-slate-400 hover:text-rose-500 hover:bg-rose-50 ml-1 cursor-pointer transition-colors shadow-2xs"
+                title="Remove attached image"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 
-        </div>
+          {/* Hidden File Input for Image Upload */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageSelect}
+            accept="image/*"
+            className="hidden"
+          />
 
-        {/* 5. CHAT INPUT BAR */}
-        <div className="p-3 sm:p-4 bg-white border-t border-slate-200 flex-shrink-0 shadow-lg">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSendQuery();
             }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 bg-slate-100/80 border border-slate-200/90 rounded-full px-2 py-1.5 shadow-inner focus-within:bg-white focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all"
           >
-            {/* Voice Mic Button */}
+            {/* 1. Dedicated Image Upload / Paperclip Button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-9 h-9 rounded-full bg-white text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 flex-shrink-0"
+              title="Attach Product Photo for Visual Search (Gemini Vision)"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
+            {/* 2. Dedicated Microphone Voice Button */}
             <button
               type="button"
               onClick={handleToggleVoice}
-              className={`p-2.5 rounded-2xl transition-all cursor-pointer ${
-                isListening 
-                  ? "bg-rose-500 text-white animate-pulse" 
-                  : "bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 flex-shrink-0 ${
+                voiceState === 'listening'
+                  ? "bg-rose-500 text-white animate-pulse shadow-md shadow-rose-300 ring-2 ring-rose-300"
+                  : voiceState === 'processing'
+                  ? "bg-amber-500 text-white animate-spin shadow-md shadow-amber-200"
+                  : voiceState === 'error'
+                  ? "bg-red-100 text-red-600"
+                  : "bg-white text-slate-600 hover:text-indigo-600 hover:bg-indigo-50"
               }`}
-              title="Voice Search"
+              title={
+                voiceState === 'listening'
+                  ? "Listening... Click to stop"
+                  : voiceState === 'processing'
+                  ? "Processing voice query..."
+                  : "Voice Search (Speak in Hindi / Hinglish / English)"
+              }
             >
-              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              {voiceState === 'listening' ? (
+                <MicOff className="w-4 h-4" />
+              ) : voiceState === 'processing' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Mic className="w-4 h-4" />
+              )}
             </button>
 
             {/* Input Field */}
             <input
               type="text"
-              placeholder="Ask anything (e.g. 'Remove laptop from cart', 'Proceed to checkout', 'Show audit trail')..."
+              placeholder={
+                voiceState === 'listening'
+                  ? "🎙️ Listening... Speak now (Hindi / English / Hinglish)"
+                  : voiceState === 'processing'
+                  ? "⚡ Processing voice query..."
+                  : isCompressingImage
+                  ? "🖼️ Compressing image to WebP..."
+                  : (selectedImage ? "Type an optional note or hit send to analyze..." : "Type your message here...")
+              }
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
-              className="flex-1 bg-slate-50 border border-slate-300 focus:border-indigo-600 focus:bg-white rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-slate-900 focus:outline-none transition-all"
+              className="flex-1 bg-transparent border-none text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none px-2"
             />
 
-            {/* Send Button */}
+            {/* 3. Send Button */}
             <button
               type="submit"
-              disabled={!inputQuery.trim() || loading}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white p-2.5 rounded-2xl shadow-md transition-all cursor-pointer active:scale-95 flex-shrink-0"
+              disabled={(!inputQuery.trim() && !selectedImage) || loading}
+              className="w-9 h-9 rounded-full bg-gradient-to-r from-[#5442f6] to-[#7f52f8] hover:from-[#4936ec] hover:to-[#7245ec] disabled:opacity-40 text-white flex items-center justify-center shadow-md transition-all cursor-pointer active:scale-95 flex-shrink-0"
+              title="Send Message / Analyze"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 -mr-0.5" />
             </button>
           </form>
-
-          {/* Quick Command Suggestions */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-2">
-            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider flex-shrink-0">
-              Quick:
-            </span>
-            <button
-              onClick={() => handleSendQuery("Show My Cart")}
-              className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg whitespace-nowrap hover:bg-indigo-100 transition-colors"
-            >
-              🛒 Cart
-            </button>
-            <button
-              onClick={() => handleSendQuery("Initiate checkout and pay with Razorpay")}
-              className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg whitespace-nowrap hover:bg-emerald-100 transition-colors"
-            >
-              ⚡ Pay Now
-            </button>
-            <button
-              onClick={() => handleSendQuery("Show audit trail")}
-              className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg whitespace-nowrap hover:bg-amber-100 transition-colors"
-            >
-              📝 Audit
-            </button>
-            <button
-              onClick={() => handleSendQuery("Best deals under ₹500")}
-              className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg whitespace-nowrap hover:bg-slate-200 transition-colors"
-            >
-              🔥 Deals
-            </button>
-          </div>
         </div>
 
       </div>

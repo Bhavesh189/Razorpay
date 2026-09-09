@@ -1,7 +1,82 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { allProducts, searchProductsLocally } from '../data/products/index.js';
+import { ProductSearchEngine } from '../search/SearchEngine.js';
+import { redisService } from './redisService.js';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
+
+// Global unified ProductSearchEngine instance for AI Commerce
+let globalSearchEngine = null;
+export function setSearchEngine(engine) {
+  globalSearchEngine = engine;
+}
+
+export function getSearchEngine() {
+  if (!globalSearchEngine) {
+    globalSearchEngine = new ProductSearchEngine(allProducts);
+  }
+  return globalSearchEngine;
+}
+
+// Multi-Turn Structured Session State Store backed by Redis
+export const sessionStore = new Map();
+
+export async function getSessionState(sessionId = "default_session") {
+  // 1. Try Redis
+  try {
+    const redisState = await redisService.getSessionState(sessionId);
+    if (redisState) {
+      sessionStore.set(sessionId, redisState);
+      return redisState;
+    }
+  } catch {}
+
+  // 2. In-Memory Cache
+  if (!sessionStore.has(sessionId)) {
+    const initialState = {
+      sessionId,
+      conversation: [],
+      currentIntent: "GREETING",
+      category: null,
+      requirements: {},
+      activeResults: [],
+      cart: [],
+      checkoutState: null,
+      updatedAt: new Date().toISOString()
+    };
+    sessionStore.set(sessionId, initialState);
+    redisService.setSessionState(sessionId, initialState).catch(() => {});
+  }
+  return sessionStore.get(sessionId);
+}
+
+export async function setSessionState(sessionId, state) {
+  const updated = {
+    ...state,
+    sessionId,
+    updatedAt: new Date().toISOString()
+  };
+  sessionStore.set(sessionId, updated);
+  try {
+    await redisService.setSessionState(sessionId, updated);
+  } catch {}
+  return updated;
+}
+
+export async function clearSessionState(sessionId) {
+  if (sessionId) {
+    sessionStore.delete(sessionId);
+    try {
+      await redisService.clearSessionState(sessionId);
+    } catch {}
+  }
+}
 
 // Initialize Gemini safely with sanitized key
 const geminiApiKey = (process.env.GEMINI_API_KEY || process.env.AI_API_KEY || '').replace(/['"]/g, '').trim();
@@ -14,87 +89,228 @@ if (geminiApiKey && geminiApiKey !== 'your_api_key_here') {
   }
 }
 
-const SHOPPING_SYSTEM_PROMPT = `You are the **Infinity Store AI Senior Shopping Advisor & Executive Sales Consultant** — an expert at consultative technical specification breakdown, customer requirements assessment, and seamless commerce closing.
+const SHOPPING_SYSTEM_PROMPT = `You are **Infinity AI — Senior Personal Commerce Advisor & Friendly Shopping Partner** at Infinity Store.
+You speak naturally in friendly Hinglish, Hindi, or English (strictly matching the user's language, dialect, and tone).
 
-## CONVERSATION MODES
+## YOUR PERSONALITY & CORE PRINCIPLES:
+1. **Shopping Scope Guard**: You are strictly a commerce assistant. If the user asks for code, homework, medical, legal, political, or general knowledge (e.g. "write binary search in C++"), politely refuse and redirect in the user's language: "I'm focused on helping you shop. Tell me what product you're looking for and I'll help you find the right one."
+2. **Conversational First**: Handle casual greetings ("hello", "how are you", "i want to buy something") naturally without immediately dumping products. Ask what they are shopping for.
+3. **No Direct Product Dump on Broad Words**: If user just mentions a broad category (e.g., "laptop", "phone", "saree"), requirement discovery comes first.
+4. **Honest Catalog Answers**: If the user's budget is impossibly low for a category (e.g. gaming laptop under ₹5,000), do NOT hallucinate fake products or silently alter the budget. Honestly state that no matching products exist in the catalog within that budget, state the real starting price, and ask if they'd like to adjust their budget.
+5. **Language Matching**: The AI conversation text must follow the user's language (English / Hindi / Hinglish). (Note: The store UI remains English).
 
-### MODE 1: INITIAL DISCOVERY (ONLY on first, highly generic queries)
-*Example: User simply says "I want a laptop", "show me clothes", "suggest some shoes", "need a smartphone"*
-- **Warm Welcome**: Greet the customer professionally like an expert personal technology/fashion consultant.
-- **Provide Questionnaire Object ONCE**: Include 3-4 clickable specification options and a custom requirement placeholder.
-- **NO PRODUCTS YET**: In Mode 1 only, questionnaire is populated so the user can quickly pick their preferred specifications.
-
-### MODE 2: SPECIFICATION-BASED PRODUCT RECOMMENDATIONS (When user has selected an option or provided ANY specification)
-*Example: User specifies "gaming", "coding", "under 60000", "RTX 4060", "32GB RAM", "16GB", "lightweight", "cotton 220 gsm", or submitted choices from discovery questionnaire*
-- **CRITICAL RULE**: You MUST set "questionnaire": null. NEVER ask discovery questions or present questionnaires again!
-- **Detailed Technical Breakdown**:
-  - Analyze the exact hardware / fabric specifications (Processor, RTX GPU, Refresh Rate, RAM, SSD, Cooling system, Material GSM, etc.).
-  - Explain WHY these exact specifications meet their stated use-case.
-- **Cross-Selling / Accessory Pairing**:
-  - Recommend complementary items in clear, professional English:
-    - For Laptops: RGB gaming mouse, mechanical keyboard, or dual-turbo cooling pad.
-    - For Smartphones: 65W GaN fast charger, protective glass, or wireless earbuds.
-    - For Fashion / Ethnic: Matching accessories, jewelry, or footwear.
-- **Assurance**: Free PAN-India Delivery, Official Razorpay 100% Encrypted Payments, and 7-Day Easy Returns.
-
-## STRICT RULES
-1. **LANGUAGE**: Always communicate in fluent, articulate, and 100% professional English. Do NOT use slang, Hindi, or Hinglish.
-2. **NO REPEATED QUESTIONS**: If the user has already provided criteria or answered a discovery option, immediately show matching products with "questionnaire": null.
-3. **VALID JSON ONLY**: Always return strictly valid JSON matching the schema below.
-
-## JSON RESPONSE FORMAT
+## JSON RESPONSE FORMAT (Always return strict JSON):
 {
-  "reply": "Your markdown response formatted with **bold**, bullet points, technical specs breakdown, and cross-sell advice in clean professional English",
-  "questionnaire": {
-    "title": "Select your preferences or enter custom specifications below:",
-    "options": [
-      { "id": "opt-1", "label": "Option 1 with Specs", "value": "Detailed preference string 1" },
-      { "id": "opt-2", "label": "Option 2 with Specs", "value": "Detailed preference string 2" },
-      { "id": "opt-3", "label": "Option 3 with Specs", "value": "Detailed preference string 3" }
-    ],
-    "customPlaceholder": "Or type custom specifications (e.g. 16GB RAM, Under ₹50,000)..."
-  } or null,
+  "showProducts": true | false,
+  "reply": "Your natural markdown response in friendly Hinglish/Hindi/English matching user's vibe",
   "suggestedFollowUpQueries": ["Option 1", "Option 2", "Option 3", "Option 4"],
-  "upsellPitch": {
-    "title": "Complementary Add-on Title (e.g. Pro Esports RGB Gaming Mouse)",
-    "price": 399,
-    "pitchMessage": "Clear English pitch explaining why this accessory pairs perfectly with their selection."
-  } or null
+  "upsellPitch": null
 }`;
 
-// Helper: Check if query has specifications or if user is responding to previous questions
-function hasUserSpecifiedRequirements(query, conversationHistory = []) {
+// Guard against non-commerce queries (coding, homework, entertainment, general knowledge)
+export function isNonCommerceQuery(query = "") {
   const q = query.toLowerCase().trim();
-
-  // Multi-option delimiters from UI questionnaire submission
-  if (q.includes('|') || q.includes('opt-') || (q.includes(',') && q.length > 25)) {
-    return true;
-  }
-
-  // Check if query contains any specific specification terms
-  const specKeywords = [
-    'gaming', 'game', 'code', 'coding', 'programming', 'developer', 'office', 'work', 'student', 'editing', 'render', 'esports',
-    'rtx', 'gtx', '4050', '4060', '4070', '4080', '4090', 'i3', 'i5', 'i7', 'i9', 'ryzen', 'intel', 'amd', 'radeon', 'nvidia',
-    'm1', 'm2', 'm3', 'm4', 'macbook', 'oled', 'fhd', 'qhd', '4k', '144hz', '165hz', '240hz', 'ips', 'mini-led', 'display', 'screen',
-    'ram', 'ssd', 'gb', 'tb', '16gb', '32gb', '8gb', '64gb', '512gb', '1tb', '256gb', 'nvme', 'ddr4', 'ddr5',
-    'under', 'below', 'less than', 'budget', 'rs', 'inr', '₹', 'price', 'cheap', 'max', 'range',
-    'lightweight', 'slim', 'thin', 'battery', 'fast', 'pro', 'ultra', 'touch', 'amoled', 'camera', 'charger', 'cotton', 'silk', 'banarasi'
+  const nonCommercePatterns = [
+    /\b(write|create|code|program|solve|explain|prove|homework|essay|assignment)\b.*?\b(c\+\+|java|python|javascript|code|algorithm|binary\s*search|sorting|bubble\s*sort|recursion|sql|database|html|css|react|node)\b/i,
+    /\b(c\+\+|python|java|javascript|cpp|rust|golang)\s+(?:program|code|script|algorithm|function|class|tutorial)\b/i,
+    /\b(?:write|give\s*me)\s*(?:a|an)?\s*(?:c\+\+|python|java|code|program|script|essay|story|poem|song|speech|joke|riddle)\b/i,
+    /\b(?:who\s*is\s*the\s*president|prime\s*minister|capital\s*of|formula\s*of|calculate\s*the\s*derivative|integrate|medical\s*advice|diagnose|symptom|prescribe|legal\s*advice|lawsuit)\b/i
   ];
+  return nonCommercePatterns.some(pat => pat.test(q));
+}
 
-  if (specKeywords.some(keyword => q.includes(keyword))) {
-    return true;
-  }
+// Deep Requirement Extraction Helper across Hindi, Hinglish & English
+export function extractDetailedRequirements(userQuery, conversationHistory = []) {
+  const q = userQuery.toLowerCase().trim();
+  const cleaned = q.replace(/,/g, '');
 
-  // Check conversation history - if previous conversation exists, requirements have already been explored
-  if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
-    const hasPriorAssistantTurn = conversationHistory.some(m => m.role === 'model' || m.role === 'assistant');
-    if (hasPriorAssistantTurn) {
-      return true;
+  let intent = "Personalized Catalog Search";
+  let targetAudience = "Smart Shoppers";
+  let budgetConstraint = null;
+  let numericBudget = null;
+  const keySpecsMatched = [];
+
+  // 1. Budget extraction with support for '50k', '20k', '50 hazar', '₹50000', etc.
+  let rawVal = null;
+  const kMatch = cleaned.match(/(\d+)\s*k\b/i);
+  if (kMatch) {
+    rawVal = parseInt(kMatch[1], 10) * 1000;
+  } else {
+    const hazarMatch = cleaned.match(/(\d+)\s*(?:hazar|thousand)/i);
+    if (hazarMatch) {
+      rawVal = parseInt(hazarMatch[1], 10) * 1000;
+    } else {
+      const budgetMatch = cleaned.match(/(?:under|below|less\s*than|max\s*price|budget\s*(?:is|of|under|:)?|₹)\s*(\d+)|(\d+)\s*(?:ke\s*andar|tak|max|rs|inr|budget|ka\s*budget|me|mein)/i);
+      if (budgetMatch) {
+        rawVal = parseInt(budgetMatch[1] || budgetMatch[2], 10);
+      }
     }
   }
+  if (rawVal && !isNaN(rawVal)) {
+    numericBudget = rawVal;
+    budgetConstraint = `Under ₹${rawVal.toLocaleString('en-IN')}`;
+  }
 
-  return false;
+  // 2. Intent & Domain Specification mapping
+  if (q.includes("game") || q.includes("gaming") || q.includes("gta") || q.includes("valorant") || q.includes("rtx") || q.includes("fps") || q.includes("pubg") || q.includes("bgmi")) {
+    intent = "High-FPS Esports & AAA Gaming";
+    targetAudience = "Gamers & Enthusiasts";
+    keySpecsMatched.push("Dedicated RTX Series GPU", "144Hz/165Hz High-Refresh Display", "Dual-Fan High-TGP Cooling", "16GB Fast Dual-Channel RAM");
+  } else if (q.includes("laptop") || q.includes("computer") || q.includes("macbook") || q.includes("pc")) {
+    intent = "High Performance Laptop & Multitasking";
+    targetAudience = "Students, Professionals & Creators";
+    keySpecsMatched.push("Intel Core i5 / Ryzen 5 Processor", "16GB Fast RAM & 512GB NVMe SSD", "FHD Eye-Care Anti-Glare Display", "Long Battery Life with Fast Charge");
+  } else if (q.includes("code") || q.includes("coding") || q.includes("programming") || q.includes("developer") || q.includes("software") || q.includes("python") || q.includes("java")) {
+    intent = "Software Development, Compiling & Multitasking";
+    targetAudience = "Developers & Engineers";
+    keySpecsMatched.push("Multi-Core High-Speed CPU", "16GB/32GB RAM for IDEs & Docker", "High-Speed NVMe PCIe Gen4 SSD", "Ergonomic Low-Blue-Light Display");
+  } else if (q.includes("air fryer") || q.includes("fryer") || q.includes("bina tel") || q.includes("oil free") || q.includes("pakode") || q.includes("crispy")) {
+    intent = "Healthy 90% Oil-Free Cooking & Air Frying";
+    targetAudience = "Health-Conscious Families & Foodies";
+    keySpecsMatched.push("Rapid 360° Thermo-Air Circulation", "BPA-Free Ceramic Non-Stick Basket", "1500W High-Efficiency Coil", "One-Touch Digital Presets");
+  } else if (q.includes("blender") || q.includes("smoothie") || q.includes("mixer") || q.includes("protein shake") || q.includes("shake")) {
+    intent = "High-Speed Nutrient Extraction & Blending";
+    targetAudience = "Fitness & Nutrition Enthusiasts";
+    keySpecsMatched.push("1000W Pure Copper High-Torque Motor", "304 Surgical Stainless Steel Blades", "Tritan BPA-Free Sipper Jars", "22,000 RPM Pulverizing Speed");
+  } else if (q.includes("massage gun") || q.includes("dard") || q.includes("pain") || q.includes("muscle") || q.includes("recovery") || q.includes("soreness")) {
+    intent = "Deep Tissue Percussion Muscle Relief & DOMS Recovery";
+    targetAudience = "Gym Goers, Athletes & Fitness Buffs";
+    keySpecsMatched.push("3200 RPM Brushless High-Torque Motor", "6 Interchangeable Targeted Heads", "LCD Speed Control", "Long-Lasting Lithium Rechargeable Battery");
+  } else if (q.includes("gym") || q.includes("fitness") || q.includes("dumbbell") || q.includes("workout") || q.includes("exercise")) {
+    intent = "High-Impact Strength Training & Fitness";
+    targetAudience = "Home Gym & Fitness Enthusiasts";
+    keySpecsMatched.push("Solid High-Durability Grip", "Anti-Tear & Anti-Slip Materials", "Joint Cushioning Support");
+  } else if (q.includes("yoga") || q.includes("stretch") || q.includes("meditation")) {
+    intent = "Joint-Friendly Yoga, Stretching & Floor Workouts";
+    targetAudience = "Yoga Practitioners & Wellness Seekers";
+    keySpecsMatched.push("6mm High-Density Dual-Color TPE", "Laser-Engraved Body Alignment Lines", "Moisture-Resistant Non-Slip Surface");
+  } else if (q.includes("perfume") || q.includes("fragrance") || q.includes("oud") || q.includes("attar") || q.includes("cologne") || q.includes("khushboo") || q.includes("scent")) {
+    intent = "Long-Lasting Signature Luxury Fragrance";
+    targetAudience = "Fragrance Lovers & Style Enthusiasts";
+    keySpecsMatched.push("25% High EDP Concentration", "24-Hour Beast Mode Sillage", "Pure Botanical Essential Oils", "Rich Cambodian Agarwood / Amber / Vanilla Notes");
+  } else if (q.includes("headphone") || q.includes("anc") || q.includes("noise cancel") || q.includes("shor") || q.includes("earbud") || q.includes("tws") || q.includes("audio")) {
+    intent = "Noise-Isolated High-Fidelity Audio & Crystal Calls";
+    targetAudience = "Music Lovers, Commuters & Remote Workers";
+    keySpecsMatched.push("Hybrid Active Noise Cancellation (ANC 35dB)", "Custom 40mm Titanium Drivers", "Quad-Mic AI ENC for Clear Calling", "50-Hour Extended Battery Life");
+  } else if (q.includes("saree") || q.includes("banarasi") || q.includes("wedding") || q.includes("shaadi") || q.includes("mummy") || q.includes("lehenga") || q.includes("festive") || q.includes("ethnic")) {
+    intent = "Royal Festive, Wedding & Traditional Celebrations";
+    targetAudience = "Ethnic Wear & Festive Shoppers";
+    keySpecsMatched.push("Pure Banarasi Art Silk with Rich Weave", "Heavy Shimmer Golden Zari Pallu", "Elegant Fall & Structured Pleats", "Matching Unstitched Blouse Piece Included");
+  } else if (q.includes("tshirt") || q.includes("t-shirt") || q.includes("oversized") || q.includes("streetwear") || q.includes("cotton")) {
+    intent = "Premium Casual & Oversized Streetwear Fit";
+    targetAudience = "Streetwear & Daily Fashion Shoppers";
+    keySpecsMatched.push("100% Bio-Washed Combed Cotton", "Heavyweight 220 GSM Dense Fabric", "Relaxed Drop-Shoulder Boxy Silhouette", "Pre-Shrunk Fade-Resistant Dye");
+  } else if (q.includes("shoe") || q.includes("sneaker") || q.includes("running") || q.includes("walking") || q.includes("footwear")) {
+    intent = "All-Day Comfort, Running & Athletic Wear";
+    targetAudience = "Daily Walkers & Runners";
+    keySpecsMatched.push("High-Rebound Air Cushion EVA Midsole", "Breathable Mesh Upper Ventilation", "Anti-Skid Traction Grooved Sole", "Shock-Absorbing Arch Support");
+  } else if (q.includes("backpack") || q.includes("luggage") || q.includes("trolley") || q.includes("travel") || q.includes("college")) {
+    intent = "Rugged Commuting, College & Travel Utility";
+    targetAudience = "Travelers, Students & Daily Commuters";
+    keySpecsMatched.push("900D Waterproof Ballistic Fabric", "Integrated External USB Charging Port", "Ergonomic Honeycomb Padded Straps", "Anti-Theft Hidden Zipper Pocket");
+  } else if (q.includes("phone") || q.includes("smartphone") || q.includes("5g") || q.includes("camera")) {
+    intent = "5G Ultra-Fast Smartphone & High-Res Photography";
+    targetAudience = "Mobile Power Users & Creators";
+    keySpecsMatched.push("108MP Pro OIS High-Res Sensor", "120Hz Curved AMOLED 1300 Nits Display", "67W/120W Turbo HyperCharge", "Dual 5G Multi-Band Connectivity");
+  } else if (q.includes("watch") || q.includes("ghadi") || q.includes("chronograph") || q.includes("smartwatch")) {
+    intent = "Executive Style & Everyday Timekeeping";
+    targetAudience = "Watch Collectors & Professionals";
+    keySpecsMatched.push("Precision Japanese Quartz Movement", "Surgical Grade Stainless Steel Chassis", "30M Water Resistance & Scratch-Resistant Glass");
+  } else {
+    keySpecsMatched.push("Verified Quality", "High Customer Satisfaction", "Direct Wholesale Pricing", "100% Secure Razorpay Checkout");
+  }
+
+  return {
+    intent,
+    targetAudience,
+    budgetConstraint: budgetConstraint || "Best Wholesale Value",
+    numericBudget,
+    keySpecsMatched
+  };
 }
+
+// Enrich every product with individualized match reasoning and match percentage
+export function enrichProductsWithRequirementMatch(products = [], requirements = {}, userQuery = "") {
+  if (!Array.isArray(products) || products.length === 0) return [];
+  const q = userQuery.toLowerCase();
+
+  return products.map((p, index) => {
+    // Generate dynamic match score: Top 1 is 98%, next 95%, 92%, etc.
+    const baseScore = Math.max(85, 98 - (index * 3));
+    const matchScore = `${baseScore}%`;
+
+    const titleLower = p.title.toLowerCase();
+    const subCat = (p.subCategory || "").toLowerCase();
+    const fabric = p.fabric || "";
+
+    // Generate specific "Why this fits you" reasoning based on product and extracted requirements
+    let whyItMatches = `Matches your requirement for **${requirements.intent || 'quality & performance'}** at **₹${p.price}** with top verified buyer ratings.`;
+    const matchedBadges = [];
+
+    if (p.price) {
+      if (requirements.budgetConstraint && requirements.budgetConstraint !== "Best Wholesale Value") {
+        matchedBadges.push(`Budget: ${requirements.budgetConstraint}`);
+      } else {
+        matchedBadges.push(`₹${p.price.toLocaleString('en-IN')} (${p.discount}% OFF)`);
+      }
+    }
+
+    if (titleLower.includes("laptop") || subCat.includes("laptop")) {
+      if (titleLower.includes("rtx") || titleLower.includes("gaming") || titleLower.includes("legion") || titleLower.includes("nitro")) {
+        matchedBadges.push("Dedicated RTX GPU", "144Hz+ Display");
+        whyItMatches = `Equipped with dedicated NVIDIA RTX graphics and high-refresh display, making it ideal for smooth 60-120+ FPS AAA gaming and rapid rendering.`;
+      } else if (titleLower.includes("ryzen") || titleLower.includes("i5") || titleLower.includes("i7")) {
+        matchedBadges.push("High-Speed Multi-Core CPU", "16GB RAM / Fast SSD");
+        whyItMatches = `Features a fast multi-core processor and 16GB RAM for seamless multitasking, coding IDEs, and office productivity.`;
+      }
+    } else if (titleLower.includes("air fryer") || subCat.includes("kitchen")) {
+      matchedBadges.push("90% Less Oil", "360° Air Circulation");
+      whyItMatches = `Prepares crispy snacks and meals with 90% less oil using rapid 360° thermo-convection, matching your healthy cooking requirement.`;
+    } else if (titleLower.includes("blender") || titleLower.includes("nutri")) {
+      matchedBadges.push("1000W Motor", "Stainless Steel Blades");
+      whyItMatches = `Pulverizes tough nuts, fruits, and protein shakes in under 15 seconds at 22,000 RPM speed.`;
+    } else if (titleLower.includes("massage gun") || titleLower.includes("massager")) {
+      matchedBadges.push("3200 RPM Percussion", "6 Targeted Heads");
+      whyItMatches = `Delivers 3200 pulses/min deep-tissue percussion to eliminate lactic acid build-up and relieve post-workout soreness.`;
+    } else if (titleLower.includes("yoga")) {
+      matchedBadges.push("6mm High Density TPE", "Alignment Lines");
+      whyItMatches = `Provides extra joint cushioning with laser alignment lines for perfect posture and zero slip during floor workouts.`;
+    } else if (titleLower.includes("oud") || titleLower.includes("perfume") || subCat.includes("fragrance")) {
+      matchedBadges.push("24H Beast Mode", "25% EDP Concentration");
+      whyItMatches = `Formulated with 25% EDP concentration for an intoxicating 24-hour sillage that leaves a royal, lingering impression.`;
+    } else if (titleLower.includes("headphone") || titleLower.includes("anc") || titleLower.includes("earbud")) {
+      matchedBadges.push("ANC 35dB Noise Cancellation", "50H Battery");
+      whyItMatches = `Silences ambient noise up to 35dB and provides crisp call clarity with 4-mic AI ENC and long battery life.`;
+    } else if (titleLower.includes("saree") || subCat.includes("saree")) {
+      matchedBadges.push("Banarasi Art Silk", "Heavy Zari Pallu");
+      whyItMatches = `Crafted with rich Banarasi silk and glistening golden zari work, delivering a majestic drape for weddings and festivals.`;
+    } else if (titleLower.includes("t-shirt") || titleLower.includes("tshirt") || subCat.includes("t-shirt")) {
+      matchedBadges.push("220 GSM Heavyweight", "100% Bio-Washed Cotton");
+      whyItMatches = `220 GSM heavyweight combed cotton gives a structured, modern drop-shoulder streetwear drape that holds shape across washes.`;
+    } else if (titleLower.includes("shoe") || titleLower.includes("sneaker")) {
+      matchedBadges.push("Air-Cushion Midsole", "Breathable Mesh");
+      whyItMatches = `High-rebound air cushion EVA sole absorbs shock and relieves heel pressure during long standing and walking.`;
+    } else if (titleLower.includes("backpack") || subCat.includes("luggage")) {
+      matchedBadges.push("900D Waterproof", "USB Charging Port");
+      whyItMatches = `Features 900D water-repellent ballistic fabric and integrated USB charging port for effortless daily travel and college use.`;
+    } else if (titleLower.includes("phone") || subCat.includes("mobile")) {
+      matchedBadges.push("108MP Sensor", "120Hz Curved AMOLED");
+      whyItMatches = `Delivers fluid 120Hz visuals, flagship 108MP low-light photography, and 67W rapid charging within your budget.`;
+    } else {
+      matchedBadges.push("4.5★+ Top Rated", "Free Express Delivery");
+      whyItMatches = `Highly rated by over ${(p.reviewsCount || 1000).toLocaleString()} customers for outstanding durability, build quality, and value.`;
+    }
+
+    return {
+      ...p,
+      matchScore,
+      matchedBadges: matchedBadges.slice(0, 3),
+      whyItMatches
+    };
+  });
+}
+
+
 
 // Generate realistic prototype demo products matching exact requested specifications and budget
 function generateDemoProductsForQuery(query, userBudget = null) {
@@ -275,6 +491,198 @@ function generateDemoProductsForQuery(query, userBudget = null) {
         description: "AMD Ryzen 9 7940HS Octa-Core Processor, NVIDIA RTX 4060 8GB, 16GB DDR5 5600MHz RAM, 1TB PCIe NVMe TLC M.2 SSD, Bang & Olufsen tuned quad speakers, and 83Wh battery."
       });
     }
+  }
+
+  // PERFUMES & FRAGRANCES PROTOTYPES
+  if (q.includes("perfume") || q.includes("fragrance") || q.includes("oud") || q.includes("attar") || q.includes("scent") || q.includes("cologne")) {
+    demoList.push({
+      id: `demo-perf-${Date.now()}-1`,
+      title: "Royal Cambodian Oud & Smoked Amber 100ml Eau De Parfum (24H Long-Stay Beast Mode Projection)",
+      mainCategory: "Beauty & Health",
+      category: "beauty-health",
+      subCategory: "Fragrances",
+      gender: "Men",
+      price: budget ? Math.min(budget - 50, 499) : 499,
+      originalPrice: 1999,
+      discount: 75,
+      rating: 4.9,
+      reviewsCount: 38200,
+      freeDelivery: true,
+      infinityMall: true,
+      colors: ["Crystal Amber Heavy Glass Bottle"],
+      sizes: ["100ml Vaporisateur EDP Spray"],
+      tags: ["perfume", "oud", "fragrance", "cologne", "edp", "attar", "luxury", "beauty"],
+      images: ["https://images.unsplash.com/photo-1523293182086-7651a899d37f?w=700&auto=format&fit=crop&q=80"],
+      fabric: "French Essential Perfume Oils (Concentration 25% EDP)",
+      seller: { name: "Maison De Parfum", rating: 4.9 },
+      description: "Rich Cambodian Agarwood heart notes with cardamom, bergamot top notes and smoky leather amber base notes. 24-hour beast-mode projection."
+    });
+    demoList.push({
+      id: `demo-perf-${Date.now()}-2`,
+      title: "French Vanilla & Madagascan Orchid 100ml Luxury Eau De Parfum (EDP) for Women",
+      mainCategory: "Beauty & Health",
+      category: "beauty-health",
+      subCategory: "Fragrances",
+      gender: "Women",
+      price: budget ? Math.min(budget - 50, 449) : 449,
+      originalPrice: 1899,
+      discount: 76,
+      rating: 4.8,
+      reviewsCount: 29100,
+      freeDelivery: true,
+      infinityMall: true,
+      colors: ["Blush Pink Frosted Bottle"],
+      sizes: ["100ml Spray"],
+      tags: ["perfume", "fragrance", "women perfume", "vanilla", "floral", "edp", "beauty"],
+      images: ["https://images.unsplash.com/photo-1541643600914-78b084683601?w=700&auto=format&fit=crop&q=80"],
+      fabric: "Pure Botanical Blossom Distillates + Warm Vanilla Absolute",
+      seller: { name: "Atelier Paris Fragrances", rating: 4.8 },
+      description: "Enchanting warm caramel vanilla, white orchid, and jasmine notes with long-lasting all-day sillage."
+    });
+  }
+
+  // KITCHEN APPLIANCES PROTOTYPES
+  if (q.includes("air fryer") || q.includes("fryer") || q.includes("blender") || q.includes("mixer") || q.includes("coffee") || q.includes("kettle") || q.includes("induction")) {
+    demoList.push({
+      id: `demo-kitch-${Date.now()}-1`,
+      title: "5.5L Digital Touchscreen Air Fryer (1500W, Rapid 360° Air Circulation, 8 One-Touch Presets)",
+      mainCategory: "Home & Kitchen",
+      category: "home-kitchen",
+      subCategory: "Kitchen & Dining",
+      gender: "All",
+      price: budget ? Math.min(budget - 100, 1899) : 1899,
+      originalPrice: 6499,
+      discount: 71,
+      rating: 4.8,
+      reviewsCount: 26800,
+      freeDelivery: true,
+      infinityMall: true,
+      colors: ["Glossy Piano Black with Rose Gold Trim"],
+      sizes: ["5.5L Family Capacity"],
+      tags: ["air fryer", "kitchen appliance", "fryer", "healthy cooking", "kitchen"],
+      images: ["https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?w=700&auto=format&fit=crop&q=80"],
+      fabric: "BPA-Free Non-Stick Ceramic Coated Basket + Stainless Steel Heating Coil",
+      seller: { name: "ChefPro Kitchen Innovations", rating: 4.8 },
+      description: "Cooks crispy French fries, samosas, chicken, and paneer with up to 90% less oil. Features digital LED touch display and 80°C to 200°C precision temp control."
+    });
+    demoList.push({
+      id: `demo-kitch-${Date.now()}-2`,
+      title: "1000W High-Speed Nutri-Blender & Smoothie Maker with 3 Tritan Jars & 6-Blade Extractor",
+      mainCategory: "Home & Kitchen",
+      category: "home-kitchen",
+      subCategory: "Kitchen & Dining",
+      gender: "All",
+      price: budget ? Math.min(budget - 100, 999) : 999,
+      originalPrice: 3499,
+      discount: 71,
+      rating: 4.7,
+      reviewsCount: 19400,
+      freeDelivery: true,
+      infinityMall: true,
+      colors: ["Metallic Gunmetal Grey"],
+      sizes: ["1000W Motor + 3 Jars (1000ml, 700ml, 400ml)"],
+      tags: ["blender", "mixer", "smoothie maker", "kitchen", "juicer"],
+      images: ["https://images.unsplash.com/photo-1570222094114-d054a817e56b?w=700&auto=format&fit=crop&q=80"],
+      fabric: "Pure Copper Motor + Food-Grade 304 Stainless Steel Blades",
+      seller: { name: "NutriLife Appliances", rating: 4.7 },
+      description: "Pulverizes tough nuts, seeds, and smoothies in seconds at 22,000 RPM speed with travel-ready sip-and-go lids."
+    });
+  }
+
+  // GYM & FITNESS PROTOTYPES
+  if (q.includes("gym") || q.includes("fitness") || q.includes("dumbbell") || q.includes("yoga") || q.includes("massage gun") || q.includes("workout")) {
+    demoList.push({
+      id: `demo-fit-${Date.now()}-1`,
+      title: "Deep Tissue Percussion Muscle Massage Gun with 6 Speed Heads & LCD Touch Screen",
+      mainCategory: "Fitness & Sports",
+      category: "home-kitchen",
+      subCategory: "Gym & Fitness",
+      gender: "All",
+      price: budget ? Math.min(budget - 50, 799) : 799,
+      originalPrice: 2999,
+      discount: 73,
+      rating: 4.8,
+      reviewsCount: 24500,
+      freeDelivery: true,
+      infinityMall: true,
+      colors: ["Stealth Carbon Black"],
+      sizes: ["Massager + 6 Interchangeable Heads + Travel Case"],
+      tags: ["massage gun", "gym", "fitness", "muscle relief", "workout", "sports"],
+      images: ["https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=700&auto=format&fit=crop&q=80"],
+      fabric: "Brushless Quiet High-Torque Motor + Ergonomic Non-Slip Grip",
+      seller: { name: "FitPro Sports India", rating: 4.8 },
+      description: "Delivers 3200 percussions per minute to relieve muscle soreness, lactic acid buildup, and speed up post-workout recovery."
+    });
+    demoList.push({
+      id: `demo-fit-${Date.now()}-2`,
+      title: "High-Density 6mm Anti-Tear Dual-Color TPE Yoga Mat with Body Alignment Lines",
+      mainCategory: "Fitness & Sports",
+      category: "home-kitchen",
+      subCategory: "Yoga & Cardio",
+      gender: "All",
+      price: budget ? Math.min(budget - 50, 399) : 399,
+      originalPrice: 1499,
+      discount: 73,
+      rating: 4.7,
+      reviewsCount: 18200,
+      freeDelivery: true,
+      infinityMall: true,
+      colors: ["Teal & Grey", "Purple & Pink"],
+      sizes: ["6mm Extra Thick (72 x 24 Inches) with Carry Strap"],
+      tags: ["yoga mat", "gym", "fitness", "yoga", "exercise mat", "workout"],
+      images: ["https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=700&auto=format&fit=crop&q=80"],
+      fabric: "Eco-Friendly Non-Slip High-Density TPE Material",
+      seller: { name: "FitPro Sports India", rating: 4.7 },
+      description: "Superior cushioning for joints, laser-engraved alignment lines, moisture-resistant waterproof surface, and anti-slip ribbed backing."
+    });
+  }
+
+  // AUDIO & HEADPHONES PROTOTYPES
+  if (q.includes("headphone") || q.includes("earphone") || q.includes("earbud") || q.includes("tws") || q.includes("soundbar") || q.includes("speaker") || q.includes("audio")) {
+    demoList.push({
+      id: `demo-aud-${Date.now()}-1`,
+      title: "Hybrid Active Noise Cancelling (ANC 35dB) Wireless Over-Ear Headphones with 50H Battery & Hi-Res Audio",
+      mainCategory: "Electronics",
+      category: "electronics",
+      subCategory: "Audio & Wearables",
+      gender: "All",
+      price: budget ? Math.min(budget - 100, 1299) : 1299,
+      originalPrice: 4999,
+      discount: 74,
+      rating: 4.8,
+      reviewsCount: 31200,
+      freeDelivery: true,
+      infinityMall: true,
+      colors: ["Midnight Matte Black", "Silver Mist"],
+      sizes: ["Adjustable Memory Foam Earcups"],
+      tags: ["headphones", "anc", "wireless headphones", "bluetooth", "audio", "hi-res"],
+      images: ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700&auto=format&fit=crop&q=80"],
+      fabric: "Ultra-Soft Protein Leather + Memory Foam Cushions",
+      seller: { name: "Acoustic Labs Audio", rating: 4.8 },
+      description: "40mm custom titanium drivers, Hybrid ANC up to 35dB, Transparency Mode, and 50-hour battery life with fast Type-C charge."
+    });
+    demoList.push({
+      id: `demo-aud-${Date.now()}-2`,
+      title: "Low Latency 40ms ANC True Wireless Earbuds with 4-Mic ENC & Spatial 3D Audio",
+      mainCategory: "Electronics",
+      category: "electronics",
+      subCategory: "Audio & Wearables",
+      gender: "All",
+      price: budget ? Math.min(budget - 50, 549) : 549,
+      originalPrice: 2499,
+      discount: 78,
+      rating: 4.7,
+      reviewsCount: 41800,
+      freeDelivery: true,
+      infinityMall: true,
+      colors: ["Phantom Black", "Pearl White"],
+      sizes: ["Standard In-Ear with 3 Ear-Tip Sizes"],
+      tags: ["earbuds", "tws", "wireless earphones", "anc earbuds", "bluetooth", "audio"],
+      images: ["https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=700&auto=format&fit=crop&q=80"],
+      fabric: "IPX5 Sweatproof ABS Matte Polymer + Magnetic Charging Case",
+      seller: { name: "Sonic Wave Technologies", rating: 4.7 },
+      description: "13mm graphene drivers, Quad-Mic AI ENC for crystal calls, 40ms gaming mode, and 36-hour total battery life."
+    });
   }
 
   return demoList;
@@ -494,7 +902,187 @@ export function getRelatedProductsForCategory(query = "", mainProducts = []) {
     ];
   }
 
-  // 6. CAR & BIKE AUTOMOTIVE ACCESSORIES
+  // 6. PERFUMES & FRAGRANCES
+  if (q.includes("perfume") || q.includes("fragrance") || q.includes("oud") || q.includes("attar") || q.includes("cologne") || (mainProducts[0] && mainProducts[0].subCategory === "Fragrances")) {
+    return [
+      {
+        id: "rel-perf-1",
+        title: "Men's Luxury Chronograph Quartz Waterproof Stainless Steel Sports Watch",
+        mainCategory: "Jewellery & Accessories",
+        category: "jewellery-accessories",
+        subCategory: "Women Accessories",
+        price: 499,
+        originalPrice: 2499,
+        discount: 80,
+        rating: 4.8,
+        reviewsCount: 26300,
+        images: ["https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "A bold signature fragrance paired with a precision steel chronograph watch creates an undeniably sharp, executive impression.",
+        benefitTag: "Executive Styling Pair"
+      },
+      {
+        id: "rel-perf-2",
+        title: "100% Genuine Top-Grain Leather Bifold Slim Wallet with RFID Blocking",
+        mainCategory: "Jewellery & Accessories",
+        category: "jewellery-accessories",
+        subCategory: "Women Accessories",
+        price: 249,
+        originalPrice: 999,
+        discount: 75,
+        rating: 4.8,
+        reviewsCount: 37900,
+        images: ["https://images.unsplash.com/photo-1627123424574-724758594e93?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Keep your daily essentials organized in authentic top-grain leather that matches the rich sophistication of luxury perfumes.",
+        benefitTag: "Everyday Luxury Companion"
+      }
+    ];
+  }
+
+  // 7. KITCHEN APPLIANCES (AIR FRYER, BLENDER, COFFEE)
+  if (q.includes("air fryer") || q.includes("blender") || q.includes("mixer") || q.includes("coffee") || q.includes("kettle") || (mainProducts[0] && (mainProducts[0].subCategory === "Kitchen & Dining" || mainProducts[0].tags.some(t => t.includes("air fryer") || t.includes("blender"))))) {
+    return [
+      {
+        id: "rel-kitch-1",
+        title: "Airtight Modular Kitchen Storage Glass Jars with Bamboo Lids (Set of 6)",
+        mainCategory: "Home & Kitchen",
+        category: "home-kitchen",
+        subCategory: "Kitchen & Dining",
+        price: 369,
+        originalPrice: 1299,
+        discount: 71,
+        rating: 4.7,
+        reviewsCount: 19400,
+        images: ["https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Keep snacks, dry fruits, spices, and smoothie powders fresh in moisture-proof borosilicate glass canisters next to your appliances.",
+        benefitTag: "Pantry Organization"
+      },
+      {
+        id: "rel-kitch-2",
+        title: "1000W High-Speed Nutri-Blender & Smoothie Maker with 3 Jars",
+        mainCategory: "Home & Kitchen",
+        category: "home-kitchen",
+        subCategory: "Kitchen & Dining",
+        price: 999,
+        originalPrice: 3499,
+        discount: 71,
+        rating: 4.7,
+        reviewsCount: 19400,
+        images: ["https://images.unsplash.com/photo-1570222094114-d054a817e56b?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Pair your air fryer with a high-torque nutri-blender to prepare complete healthy meals and protein fruit smoothies with ease.",
+        benefitTag: "Complete Kitchen Setup"
+      }
+    ];
+  }
+
+  // 8. GYM, FITNESS & SPORTS
+  if (q.includes("gym") || q.includes("fitness") || q.includes("dumbbell") || q.includes("yoga") || q.includes("massage gun") || q.includes("workout") || (mainProducts[0] && mainProducts[0].mainCategory === "Fitness & Sports")) {
+    return [
+      {
+        id: "rel-fit-1",
+        title: "Deep Tissue Percussion Muscle Massage Gun (6 Speed Heads, LCD Display)",
+        mainCategory: "Fitness & Sports",
+        category: "home-kitchen",
+        subCategory: "Gym & Fitness",
+        price: 799,
+        originalPrice: 2999,
+        discount: 73,
+        rating: 4.8,
+        reviewsCount: 24500,
+        images: ["https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Heavy gym lifts and cardio create muscle tightness. Using a percussion massage gun right after workouts increases blood circulation and prevents DOMS stiffness.",
+        benefitTag: "Rapid Muscle Recovery"
+      },
+      {
+        id: "rel-fit-2",
+        title: "High-Density 6mm Anti-Tear Dual-Color TPE Yoga Mat with Alignment Lines",
+        mainCategory: "Fitness & Sports",
+        category: "home-kitchen",
+        subCategory: "Yoga & Cardio",
+        price: 399,
+        originalPrice: 1499,
+        discount: 73,
+        rating: 4.7,
+        reviewsCount: 18200,
+        images: ["https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Provides vital joint cushioning on hard floors for floor exercises, stretching, abdominal crunches, and yoga flows.",
+        benefitTag: "Joint Cushioning & Balance"
+      }
+    ];
+  }
+
+  // 9. AUDIO, HEADPHONES & TWS
+  if (q.includes("headphone") || q.includes("earbud") || q.includes("tws") || q.includes("soundbar") || q.includes("speaker") || (mainProducts[0] && mainProducts[0].subCategory?.includes("Audio"))) {
+    return [
+      {
+        id: "rel-aud-1",
+        title: "20000mAh 65W Fast PD Metal Power Bank for Laptops, Tablets & Headphones",
+        mainCategory: "Electronics",
+        category: "electronics",
+        subCategory: "Mobile Accessories",
+        price: 999,
+        originalPrice: 3499,
+        discount: 71,
+        rating: 4.8,
+        reviewsCount: 22400,
+        images: ["https://images.unsplash.com/photo-1609592426815-56d11f7c1341?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Never let your wireless headphones or phone run out of battery during flights, daily travel, or outdoor study sessions.",
+        benefitTag: "Uninterrupted Battery Backup"
+      },
+      {
+        id: "rel-aud-2",
+        title: "65W GaN Turbo Fast Charger Adapter with Braided Type-C Cable",
+        mainCategory: "Electronics",
+        category: "electronics",
+        subCategory: "Mobile Accessories",
+        price: 299,
+        originalPrice: 1299,
+        discount: 77,
+        rating: 4.8,
+        reviewsCount: 28900,
+        images: ["https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Quickly recharge your headphones and earbuds in just 10 minutes before heading out.",
+        benefitTag: "10-Min Fast Top-Up"
+      }
+    ];
+  }
+
+  // 10. BACKPACKS & LUGGAGE
+  if (q.includes("backpack") || q.includes("luggage") || q.includes("trolley") || q.includes("duffel") || q.includes("travel bag") || (mainProducts[0] && mainProducts[0].tags.some(t => t.includes("backpack") || t.includes("luggage")))) {
+    return [
+      {
+        id: "rel-bag-1",
+        title: "20000mAh 65W Fast PD Metal Power Bank with Multi-Port Output",
+        mainCategory: "Electronics",
+        category: "electronics",
+        subCategory: "Mobile Accessories",
+        price: 999,
+        originalPrice: 3499,
+        discount: 71,
+        rating: 4.8,
+        reviewsCount: 22400,
+        images: ["https://images.unsplash.com/photo-1609592426815-56d11f7c1341?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Plugs into your backpack's external charging port to keep your phone, earbuds, and devices powered on all your travels.",
+        benefitTag: "Travel Charging Companion"
+      },
+      {
+        id: "rel-bag-2",
+        title: "100% Genuine Vintage Top-Grain Leather Bifold Slim Wallet with RFID Blocking",
+        mainCategory: "Jewellery & Accessories",
+        category: "jewellery-accessories",
+        subCategory: "Women Accessories",
+        price: 249,
+        originalPrice: 999,
+        discount: 75,
+        rating: 4.8,
+        reviewsCount: 37900,
+        images: ["https://images.unsplash.com/photo-1627123424574-724758594e93?w=700&auto=format&fit=crop&q=80"],
+        whyBuy: "Organize currency, IDs, and credit cards with RFID shielding against contactless theft inside your travel bag.",
+        benefitTag: "Secure Travel Wallet"
+      }
+    ];
+  }
+
+  // 11. CAR & BIKE AUTOMOTIVE ACCESSORIES
   if (q.includes("car") || q.includes("bike") || q.includes("automotive") || q.includes("motorcycle") || (mainProducts[0] && mainProducts[0].mainCategory === "Automotive")) {
     return [
       {
@@ -559,324 +1147,1069 @@ export function getRelatedProductsForCategory(query = "", mainProducts = []) {
       rating: 4.8,
       reviewsCount: 28900,
       images: ["https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=700&auto=format&fit=crop&q=80"],
-      whyBuy: "Charges multiple devices simultaneously at high speeds with smart surge protection.",
+      whyBuy: "Charges multiple devices simultaneously at high speed with smart surge protection.",
       benefitTag: "Universal Fast Charging"
     }
   ];
 }
 
-export async function processAIAgentQuery(userQuery, conversationHistory = [], cartContext = []) {
+// Helper: Detect user language (Hindi / Hinglish / English)
+export function isHindiOrHinglish(text = "") {
+  if (!text) return false;
+  const q = text.toLowerCase();
+  const hindiIndicators = [
+    'hai', 'hain', 'kya', 'muje', 'mujhe', 'konsa', 'kaunsa', 'bhai', 'bro', 'lena', 'chahiye',
+    'dikhao', 'kaise', 'bolo', 'achha', 'acha', 'badhiya', 'sasta', 'mehenga', 'kharidna',
+    'tere', 'mere', 'apne', 'karke', 'batao', 'bataye', 'bataiye', 'dekh', 'thike', 'theek', 'le lu',
+    'lu', 'hoga', 'hogi', 'mil', 'sakta', 'skta', 'kitna', 'kitne', 'sahi', 'paise', 'rupaye', 'rupay',
+    'likho', 'banao', 'dhoondho', 'dhoondo', 'hatao', 'nikalo', 'shukriya', 'kripya', 'kaam', 'hazar', 'lakh'
+  ];
+  const hasDevanagari = /[\u0900-\u097F]/.test(q);
+  const hasHinglish = hindiIndicators.some(w => new RegExp(`\\b${w}\\b`, 'i').test(q));
+  return hasDevanagari || hasHinglish;
+}
+
+// Generate Interactive Questionnaire with Multiple-Choice Tick Options, Unique Session ID & Custom Input
+export function getInteractiveQuestionnaireForCategory(userQuery = "") {
+  const q = userQuery.toLowerCase();
+  const sessionId = `req-sess-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+  if (q.includes("laptop") || q.includes("computer") || q.includes("macbook") || q.includes("pc")) {
+    return {
+      requirementSessionId: sessionId,
+      category: "Laptops & Computers",
+      title: "Select Laptop Priorities & Specifications:",
+      options: [
+        { id: "opt-1", label: "Gaming & High-FPS Esports (Dedicated RTX GPU, 144Hz IPS)", value: "Gaming & High-FPS Esports" },
+        { id: "opt-2", label: "Coding, Software Dev & Multitasking (16GB RAM, Fast CPU)", value: "Coding & Software Dev" },
+        { id: "opt-3", label: "Office & College Productivity (Long Battery, Lightweight)", value: "Office & Productivity" },
+        { id: "opt-4", label: "4K Video Editing & Graphic Design (OLED Display, DCI-P3)", value: "Video Editing & Graphic Design" },
+        { id: "opt-5", label: "Budget-Friendly Student Essentials (Under ₹40,000)", value: "Budget Student Laptop" }
+      ],
+      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
+    };
+  }
+
+  if (q.includes("headphone") || q.includes("earphone") || q.includes("earbud") || q.includes("tws") || q.includes("audio") || q.includes("soundbar") || q.includes("speaker")) {
+    return {
+      requirementSessionId: sessionId,
+      category: "Audio & Headphones",
+      title: "Select Audio & Noise Cancellation Priorities:",
+      options: [
+        { id: "opt-1", label: "Hybrid 35dB Active Noise Cancellation (ANC Over-Ear)", value: "Hybrid ANC Over-Ear Headphones" },
+        { id: "opt-2", label: "Low Latency 40ms Gaming TWS Earbuds with AI ENC", value: "Low Latency Gaming Earbuds" },
+        { id: "opt-3", label: "60-Hour Long Battery Deep Bass Wireless Neckband", value: "60-Hour Long Battery Neckband" },
+        { id: "opt-4", label: "Compact Bluetooth Party Speaker with RGB Lights", value: "Portable Party Speaker" },
+        { id: "opt-5", label: "Value Audio Pick (Under ₹799)", value: "Value Audio Under ₹799" }
+      ],
+      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
+    };
+  }
+
+  if (/\b(?:phone|phones|mobile|mobiles|smartphone|smartphones|5g)\b/i.test(q) || q.includes("smartphone")) {
+    return {
+      requirementSessionId: sessionId,
+      category: "Smartphones & Gadgets",
+      title: "Select Smartphone Priorities & Features:",
+      options: [
+        { id: "opt-1", label: "108MP Pro OIS Camera & Low-Light Photography", value: "108MP Pro Camera with OIS" },
+        { id: "opt-2", label: "120Hz Curved AMOLED Display & 67W Turbo Charge", value: "120Hz AMOLED & Fast Charging" },
+        { id: "opt-3", label: "High-Performance Gaming Chipset & Dual 5G Bands", value: "Gaming 5G Performance" },
+        { id: "opt-4", label: "All-Day Long 5000mAh+ Battery Life", value: "Long Battery Life" },
+        { id: "opt-5", label: "Budget Friendly All-Rounder (Under ₹12,000)", value: "Budget Smartphone" }
+      ],
+      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
+    };
+  }
+
+  if (q.includes("saree") || q.includes("kurti") || q.includes("lehenga") || q.includes("ethnic") || q.includes("dress") || q.includes("fashion") || q.includes("shirt") || q.includes("clothing")) {
+    return {
+      requirementSessionId: sessionId,
+      category: "Fashion & Ethnic Wear",
+      title: "Select Style, Occasion & Fabric:",
+      options: [
+        { id: "opt-1", label: "Pure Banarasi Art Silk with Heavy Golden Zari Pallu", value: "Banarasi Silk Saree" },
+        { id: "opt-2", label: "Embroidered Georgette Festive Lehenga Choli Set", value: "Festive Lehenga Choli" },
+        { id: "opt-3", label: "Traditional Lucknowi Chikankari Pure Cotton Kurti", value: "Lucknowi Cotton Kurti" },
+        { id: "opt-4", label: "Heavyweight 220 GSM Oversized Casual Streetwear", value: "Oversized Streetwear Fit" },
+        { id: "opt-5", label: "Budget Steal Deals (Under ₹999)", value: "Festive Deals Under ₹999" }
+      ],
+      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
+    };
+  }
+
+  if (q.includes("shoe") || q.includes("sneaker") || q.includes("running") || q.includes("footwear")) {
+    return {
+      requirementSessionId: sessionId,
+      category: "Footwear & Shoes",
+      title: "Select Footwear Type & Comfort:",
+      options: [
+        { id: "opt-1", label: "Air-Cushion Shock-Absorbing Running & Walking Shoes", value: "Air Cushion Running Shoes" },
+        { id: "opt-2", label: "Trendy Chunky Streetwear Sneakers (All-Day Comfort)", value: "Streetwear Lifestyle Sneakers" },
+        { id: "opt-3", label: "Classic Genuine Leather Formal Office Shoes", value: "Formal Leather Shoes" },
+        { id: "opt-4", label: "Super Saver Casual Footwear (Under ₹699)", value: "Value Footwear Under ₹699" }
+      ],
+      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
+    };
+  }
+
+  if (q.includes("gym") || q.includes("fitness") || q.includes("dumbbell") || q.includes("workout") || q.includes("massage gun") || q.includes("yoga")) {
+    return {
+      requirementSessionId: sessionId,
+      category: "Fitness & Sports",
+      title: "Select Fitness & Training Gear:",
+      options: [
+        { id: "opt-1", label: "Solid Cast Iron Adjustable Home Gym Dumbbell Set", value: "Cast Iron Dumbbell Set" },
+        { id: "opt-2", label: "Deep Tissue 3200 RPM Percussion Massage Gun (Muscle Relief)", value: "Deep Tissue Massage Gun" },
+        { id: "opt-3", label: "6mm High-Density Non-Slip Body Alignment Yoga Mat", value: "Non-Slip Yoga Mat" },
+        { id: "opt-4", label: "Complete Home Workout Starter Pack (Under ₹999)", value: "Home Fitness Gear Under ₹999" }
+      ],
+      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
+    };
+  }
+
+  if (q.includes("appliance") || q.includes("kitchen") || q.includes("air fryer") || q.includes("blender") || q.includes("mixer") || q.includes("kettle")) {
+    return {
+      requirementSessionId: sessionId,
+      category: "Home & Kitchen Appliances",
+      title: "Select Kitchen Appliance Priorities:",
+      options: [
+        { id: "opt-1", label: "90% Oil-Free Rapid 360° Air Fryer (4L+ Capacity)", value: "Oil-Free Digital Air Fryer" },
+        { id: "opt-2", label: "1000W High-Torque Nutrient Blender & Smoothie Maker", value: "High-Power Nutrient Blender" },
+        { id: "opt-3", label: "Stainless Steel Fast-Boil Electric Kettle (1.8L)", value: "Electric Kettle" },
+        { id: "opt-4", label: "Budget Kitchen Essentials (Under ₹1,499)", value: "Kitchen Essentials Under ₹1499" }
+      ],
+      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
+    };
+  }
+
+  return null;
+}
+
+// Helper: Extract active shopping category from current query or recent conversation history
+export function getActiveCategoryFromContext(userQuery = "", conversationHistory = []) {
+  const q = (userQuery || "").toLowerCase();
+
+  // 1. Direct match from current query
+  if (q.includes("laptop") || q.includes("computer") || q.includes("macbook") || q.includes("pc")) return "laptops";
+  if (q.includes("headphone") || q.includes("earphone") || q.includes("earbud") || q.includes("tws") || q.includes("soundbar") || q.includes("speaker") || q.includes("audio")) return "headphones";
+  if (/\b(?:phone|phones|mobile|mobiles|smartphone|smartphones|5g)\b/i.test(q)) return "phones";
+  if (q.includes("saree") || q.includes("kurti") || q.includes("lehenga") || q.includes("ethnic") || q.includes("shirt") || q.includes("tshirt") || q.includes("t-shirt") || q.includes("dress") || q.includes("clothing")) return "fashion";
+  if (q.includes("shoe") || q.includes("shoes") || q.includes("sneaker") || q.includes("footwear")) return "footwear";
+  if (q.includes("gym") || q.includes("fitness") || q.includes("dumbbell") || q.includes("workout") || q.includes("yoga") || q.includes("massage gun")) return "fitness";
+  if (q.includes("air fryer") || q.includes("blender") || q.includes("mixer") || q.includes("kettle") || q.includes("appliance") || q.includes("kitchen")) return "appliances";
+  if (q.includes("watch") || q.includes("ghadi") || q.includes("smartwatch")) return "watches";
+  if (q.includes("perfume") || q.includes("fragrance") || q.includes("oud") || q.includes("attar") || q.includes("cologne")) return "fragrances";
+  if (q.includes("backpack") || q.includes("bag") || q.includes("luggage") || q.includes("wallet")) return "bags";
+
+  // 2. Look back in conversation history from newest to oldest
+  if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+    for (let i = conversationHistory.length - 1; i >= 0; i--) {
+      const msg = conversationHistory[i];
+      const text = (msg.text || msg.content || "").toLowerCase();
+      if (text.includes("laptop") || text.includes("computer") || text.includes("macbook")) return "laptops";
+      if (text.includes("headphone") || text.includes("earphone") || text.includes("earbud") || text.includes("tws") || text.includes("soundbar") || text.includes("audio")) return "headphones";
+      if (/\b(?:phone|phones|mobile|mobiles|smartphone|smartphones|5g)\b/i.test(text)) return "phones";
+      if (text.includes("saree") || text.includes("kurti") || text.includes("lehenga") || text.includes("ethnic") || text.includes("shirt") || text.includes("clothing")) return "fashion";
+      if (text.includes("shoe") || text.includes("shoes") || text.includes("sneaker") || text.includes("footwear")) return "footwear";
+      if (text.includes("gym") || text.includes("fitness") || text.includes("dumbbell") || text.includes("yoga")) return "fitness";
+      if (text.includes("air fryer") || text.includes("blender") || text.includes("kitchen")) return "appliances";
+      if (text.includes("watch") || text.includes("smartwatch")) return "watches";
+      if (text.includes("perfume") || text.includes("fragrance") || text.includes("oud")) return "fragrances";
+      if (text.includes("backpack") || text.includes("bag") || text.includes("luggage")) return "bags";
+    }
+  }
+
+  return null;
+}
+
+// Helper: Check if user has already specified requirements or is responding to the questionnaire
+export function hasUserSpecifiedRequirements(userQuery = "", conversationHistory = []) {
   const q = userQuery.toLowerCase().trim();
 
-  // ===================== FAST CART COMMANDS (ENGLISH ONLY) =====================
-  // A. REMOVE FROM CART
-  if (
-    q.includes("remove") || q.includes("delete") || q.includes("cancel") ||
-    q.includes("hatao") || q.includes("hata do") || q.includes("nikal do") || q.includes("cart se hata")
-  ) {
-    let target = "";
-    if (q.includes("laptop")) target = "laptop";
-    else if (q.includes("phone") || q.includes("mobile")) target = "phone";
-    else if (q.includes("shirt")) target = "shirt";
-    else if (q.includes("tshirt") || q.includes("t-shirt")) target = "t-shirt";
-    else if (q.includes("saree")) target = "saree";
-    else if (q.includes("kurti") || q.includes("kurta")) target = "kurti";
-    else if (q.includes("shoes") || q.includes("shoe")) target = "shoe";
-    else if (q.includes("mouse")) target = "mouse";
-    else if (q.includes("keyboard")) target = "keyboard";
-    else if (q.includes("headset") || q.includes("earbuds")) target = "earbuds";
-    else target = q.replace(/cart\s*se\s*hatao?|hata\s*do|remove|from\s*cart|delete|cancel/gi, "").trim();
-
-    return {
-      success: true,
-      reply: `Done! 🗑️ **${target ? target.charAt(0).toUpperCase() + target.slice(1) : 'Item'}** has been removed from your cart.\n\nYour shopping cart has been updated. Would you like to review remaining items or **proceed to checkout**? ⚡`,
-      agentAction: {
-        type: "REMOVE_FROM_CART",
-        target: target || "all",
-        message: `${target || 'Item'} removed from cart`
-      },
-      products: [],
-      relatedProducts: [],
-      suggestedFollowUpQueries: ["Show My Cart 🛒", "Proceed to Checkout ⚡", "Top Trending Deals 🔥"]
-    };
+  // If user is switching or introducing a broad category without concrete specs (e.g. "actually I want a smartphone", "laptop dikhao", "show me phones")
+  const isBroadCategoryRequest = (
+    /^(?:i\s*need|i\s*want|show\s*me|actually\s*i\s*want|actually|instead|mujhe|muje|mujhe\s*bhi)?\s*(?:a\s*|an\s*)?(?:laptop|laptops|computer|macbook|phone|phones|mobile|mobiles|smartphone|smartphones|5g|headphone|headphones|earphones|earbuds|tws|saree|sarees|kurti|kurtis|shoes|shoe|perfume|fragrance|watch|smartwatch|air\s*fryer|blender|gym|fitness|bag|backpack)(?:\s*(?:instead|chahiye|dikhao|leke\s*aao|please))?[.!?]*$/i.test(q)
+  );
+  if (isBroadCategoryRequest) {
+    return false;
   }
 
-  // B. SHOW CART
-  if (
-    q.includes("cart dikhao") || q.includes("show cart") || q.includes("cart me kya hai") ||
-    q.includes("my cart") || q.includes("view cart")
-  ) {
-    return {
-      success: true,
-      reply: `Here is your **Live Shopping Cart**! 🛒✨\n\n🔥 **Special Promotion**: Complete your order now to unlock **100% Free Express PAN-India Delivery** + **Extra ₹50 First-Order Discount (Code: FIRST50)**!\n\nReview your items below and complete your order with **1-Click Razorpay Checkout**:`,
-      agentAction: {
-        type: "SHOW_CART"
-      },
-      inChatCheckout: {
-        ready: true,
-        message: "Your order is ready for payment! Pay securely with Razorpay:",
-        actionText: "Proceed to Razorpay Payment ⚡"
-      },
-      products: [],
-      relatedProducts: [],
-      suggestedFollowUpQueries: ["Pay Now with Razorpay ⚡", "Continue Shopping 🛍️", "Apply FIRST50 Coupon"]
-    };
+  // 1. If query came from interactive questionnaire submission
+  if (q.includes('|') || q.includes('under ₹') || q.includes('selected:') || q.includes('opt-') || q.includes('priority')) {
+    return true;
   }
 
-  // C. CHECKOUT / PAYMENT
-  if (
-    q.includes("checkout") || q.includes("payment") || q.includes("pay") || q.includes("buy now") ||
-    q.includes("order book") || q.includes("order place") || q.includes("kharidna hai")
-  ) {
-    return {
-      success: true,
-      reply: `Outstanding choice! 🔥 Your order is ready for instant checkout!\n\n💳 **Payment Mode**: 100% Encrypted **Razorpay Gateway** (UPI, Google Pay, PhonePe, Cards, NetBanking)\n🚚 **Delivery**: Free Express PAN-India Doorstep Dispatch\n🛡️ **Buyer Protection**: 7-Day Hassle-Free Returns & Full Money-Back Guarantee\n\nTap **"Pay with Razorpay"** below to complete your purchase securely:`,
-      agentAction: {
-        type: "INITIATE_CHECKOUT"
-      },
-      inChatCheckout: {
-        ready: true,
-        message: "Payment Gateway Ready! Secure 1-Click Pay with Razorpay:",
-        actionText: "⚡ Pay Now with Razorpay"
-      },
-      products: [],
-      relatedProducts: [],
-      suggestedFollowUpQueries: ["Show My Cart 🛒", "Order Tracking Info 📦", "Available Coupons"]
-    };
+  // 2. Direct consultative advice question
+  if (q.includes("konsa lu") || q.includes("kaunsa lu") || q.includes("tere hisab se") || q.includes("kya lena chahiye") || q.includes("suggest kar ek") || q.includes("konsa best") || q.includes("kaunsa best")) {
+    return true;
   }
 
-  // ===================== PROCESS WITH GEMINI OR SMART FALLBACK =====================
-  const userHasSpecified = hasUserSpecifiedRequirements(userQuery, conversationHistory);
-  let matched = searchProductsLocally(userQuery);
+  // 3. If user query has multiple concrete specs (e.g. 16gb ram, rtx 4060, 50k gaming, banarasi silk)
+  const concreteSpecKeywords = [
+    '16gb', '32gb', '8gb', 'rtx', 'gtx', '4050', '4060', '4070', '4080', 'i5', 'i7', 'i9', 'ryzen', 'ssd', '512gb', '1tb', 'oled', '144hz', '240hz',
+    'banarasi', 'georgette', 'chikankari', 'cotton', 'silk', 'anc', '35db', 'tws', 'dumbbell', 'cast iron', 'size 8', 'size 9', 'size 7',
+    'gaming', 'esports', 'coding', 'software dev', 'video editing', 'multitasking', 'budget student'
+  ];
+  const specCount = concreteSpecKeywords.filter(w => q.includes(w)).length;
+  const hasBudgetSpec = /\d+k|\d+\s*(?:hazar|thousand)|under\s*\d+|₹\d+/i.test(q);
 
-  // If matched catalog items are empty or sparse, generate dynamic prototype demo products matching exact specifications
-  if (matched.length === 0 || (userHasSpecified && matched.length < 2)) {
-    const demoItems = generateDemoProductsForQuery(userQuery);
-    if (demoItems.length > 0) {
-      matched = [...demoItems, ...matched];
+  if (specCount >= 2 || (specCount >= 1 && hasBudgetSpec) || (hasBudgetSpec && (q.includes("gaming") || q.includes("coding") || q.includes("heavy") || q.includes("office") || q.includes("banarasi")))) {
+    return true;
+  }
+
+  // 4. If conversation history shows category is active or questionnaire was already presented
+  if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+    const lastAssistantMsg = [...conversationHistory].reverse().find(m => m.role === 'assistant' || m.role === 'model');
+    const wasQuestionnaireOrPromptAsked = lastAssistantMsg && (
+      (lastAssistantMsg.message || lastAssistantMsg.text || "").toLowerCase().includes("priorit") ||
+      (lastAssistantMsg.message || lastAssistantMsg.text || "").toLowerCase().includes("requirement") ||
+      (lastAssistantMsg.message || lastAssistantMsg.text || "").toLowerCase().includes("specification") ||
+      (lastAssistantMsg.message || lastAssistantMsg.text || "").toLowerCase().includes("questionnaire") ||
+      (lastAssistantMsg.message || lastAssistantMsg.text || "").toLowerCase().includes("looking for") ||
+      (lastAssistantMsg.message || lastAssistantMsg.text || "").toLowerCase().includes("options")
+    );
+
+    const hasPreferenceWords = specCount >= 1 || hasBudgetSpec || q.includes("gaming") || q.includes("coding") || q.includes("office") || q.includes("heavy") || q.includes("battery") || q.includes("camera") || q.includes("esport") || q.includes("student") || q.includes("work") || q.includes("budget");
+    if (hasPreferenceWords || wasQuestionnaireOrPromptAsked) {
+      return true;
     }
   }
 
-  const topProducts = matched.slice(0, 6);
-
-  if (genAI) {
-    return await generateGeminiResponse(userQuery, conversationHistory, cartContext, topProducts, userHasSpecified);
-  } else {
-    return generateFallbackResponse(userQuery, topProducts, userHasSpecified);
-  }
+  return false;
 }
 
-async function generateGeminiResponse(userQuery, conversationHistory = [], cartContext = [], topProducts = [], userHasSpecified = false) {
-  // Build rich product specifications context for Gemini
-  const productContext = topProducts.map((p, i) => {
-    const savings = p.originalPrice - p.price;
-    const reviewCount = p.reviewsCount || Math.floor(p.rating * 1200 + 500);
-    const stockLeft = Math.floor(Math.random() * 6) + 2;
-    const viewingNow = Math.floor(Math.random() * 35) + 18;
-    return `[Product #${i + 1}]
-- Title: "${p.title}"
-- Category: ${p.mainCategory} > ${p.subCategory}
-- Sale Price: Rs.${p.price} | MRP: Rs.${p.originalPrice} | Discount: ${p.discount}% OFF (Buyer Saves Rs.${savings})
-- Technical Specifications / Fabric: ${p.fabric || 'Premium Certified Build'}
-- Detailed Description: ${p.description || p.title}
-- Available Sizes: ${p.sizes ? p.sizes.join(', ') : 'Standard'}
-- Available Colors: ${p.colors ? p.colors.join(', ') : 'Assorted'}
-- Rating & Trust: ${p.rating}★ (${reviewCount.toLocaleString()} Verified Customer Reviews)
-- Live Inventory: Only ${stockLeft} units remaining | ${viewingNow} buyers currently viewing
-- Free Delivery: Yes | 7-Day Returns: Yes${p.infinityMall ? ' | Infinity Mall Official Verified' : ''}`;
-  }).join('\n\n');
+// Conversation State Machine Constants
+export const ConversationState = {
+  GREETING: 'GREETING',
+  IDENTITY: 'IDENTITY',
+  NON_COMMERCE: 'NON_COMMERCE',
+  DISCOVERING_INTENT: 'DISCOVERING_INTENT',
+  COLLECTING_REQUIREMENTS: 'COLLECTING_REQUIREMENTS',
+  REQUIREMENTS_COMPLETE: 'REQUIREMENTS_COMPLETE',
+  RETRIEVING_PRODUCTS: 'RETRIEVING_PRODUCTS',
+  RECOMMENDING: 'RECOMMENDING',
+  CART_ACTION: 'CART_ACTION',
+  POLICY: 'POLICY',
+  COUPONS: 'COUPONS',
+  UNCLEAR: 'UNCLEAR'
+};
 
-  // Build cart context
-  const cartInfo = cartContext.length > 0
-    ? `\n\nCustomer's Current Cart (${cartContext.length} items): ${cartContext.map(c => `"${c.title}" Rs.${c.price}`).join(', ')}.`
-    : '\n\nCustomer Cart: Currently empty.';
+// Helper: Detect conversational state and intent accurately
+export function analyzeConversationState(userQuery = "", conversationHistory = [], cartContext = [], userProfile = {}) {
+  const q = userQuery.toLowerCase().trim();
 
-  // Build conversation history summary
-  let historyPrompt = "";
-  if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
-    historyPrompt = "\n\nRecent Conversation History:\n" + conversationHistory
-      .slice(-6)
-      .map(m => `${m.role === 'user' ? 'Customer' : 'AI Consultant'}: ${m.text}`)
-      .join('\n');
+  // 1. Non-Commerce Scope Guard (Coding, Homework, Medical, Politics)
+  if (isNonCommerceQuery(userQuery)) {
+    return {
+      state: ConversationState.NON_COMMERCE,
+      intent: 'non_commerce',
+      shoppingIntent: false,
+      category: null,
+      requirementsComplete: false,
+      shouldSearchProducts: false
+    };
   }
 
-  const specInstruction = userHasSpecified 
-    ? `\n\n⚠️ INSTRUCTION: The user has ALREADY specified requirements or chosen options. You MUST set "questionnaire": null. Break down the specifications of the recommended products and recommend complementary accessories in clean English.`
-    : `\n\n⚠️ INSTRUCTION: If the user's query is broad and initial, you may present a 3-4 option questionnaire. Otherwise, provide concrete product specifications and set "questionnaire": null.`;
+  // 2. Fast Cart & Checkout Actions
+  const isRemoveFromCart = (
+    /\b(?:remove|delete|hatao|hata\s*do|nikal\s*do)\b/i.test(q) ||
+    /\bcart\s*se\s*(?:hata|nikal)\b/i.test(q) ||
+    /\bcancel\s*(?:item|cart|product|order)\b/i.test(q)
+  ) && !q.includes("noise cancellation") && !q.includes("anc");
 
-  const userPrompt = `Customer Query: "${userQuery}"${historyPrompt}
-${cartInfo}
+  const isShowCart = /\b(?:cart\s*dikhao|show\s*cart|view\s*cart|my\s*cart|cart\s*me\s*kya)\b/i.test(q);
+  const isCheckout = /\b(?:checkout|payment|pay|order\s*book|order\s*place|buy\s*now)\b/i.test(q);
 
-Catalog Recommendations & Available Specifications:
-${productContext || 'Demo specification products available.'}${specInstruction}
+  if (isRemoveFromCart || isShowCart || isCheckout) {
+    return {
+      state: ConversationState.CART_ACTION,
+      intent: isRemoveFromCart ? 'remove_from_cart' : (isShowCart ? 'show_cart' : 'checkout'),
+      shoppingIntent: true,
+      category: null,
+      requirementsComplete: false,
+      shouldSearchProducts: false
+    };
+  }
 
-YOUR GOAL IN THIS TURN:
-1. Act as the Senior Commerce Consultant and Advisor.
-2. Reply in articulate, 100% professional English.
-3. If requirements are specified (or previously chosen), analyze the exact hardware/material specifications, why they meet the requirements, and suggest an upsell accessory. Set "questionnaire": null.
-4. Always return strictly valid JSON.`;
+  // 3. Identity / Capabilities ("Who are you", "kya kr skta hai tu", "aap kya kar sakte ho", "tell me about yourself")
+  const isIdentity = (
+    /\b(?:who\s*are\s*you|tell\s*me\s*about\s*yourself|aap\s*kaun\s*ho|tu\s*kaun\s*hai)\b/i.test(q) ||
+    /\b(?:kya\s*(?:kar|kr)\s*(?:sakta|sakte|skta|skte)\s*(?:hai|ho|tu|aap)?)\b/i.test(q) ||
+    /\b(?:what\s*can\s*you\s*do|what\s*do\s*you\s*do)\b/i.test(q) ||
+    q.includes("kya kar sakte") || q.includes("kya kr skta") || q.includes("who are you") || q.includes("aap kaun ho")
+  );
+  if (isIdentity) {
+    return {
+      state: ConversationState.IDENTITY,
+      intent: 'identity',
+      shoppingIntent: false,
+      category: null,
+      requirementsComplete: false,
+      shouldSearchProducts: false
+    };
+  }
 
-  try {
-    const geminiModel = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: SHOPPING_SYSTEM_PROMPT
-    });
+  // 4. Greetings & Casual Banter ("Hello", "Hello bhai", "Kesa hai", "Kaise ho", "Kya haal", "Good morning", "How are you", "Whats up", "Thanks", "Okay", "Cool", "Nice")
+  const isGreetingOrBanter = (
+    /\b(?:hello|hi|hey|hii|heyy|namaste|pranam|good\s*(?:morning|afternoon|evening|night)|yo|hola|assalam|salaam)\b/i.test(q) ||
+    /\b(?:how\s*are\s*you|how\s*r\s*u|wassup|what'?s\s*up|kaise\s*ho|kaisa\s*hai|kesa\s*hai|kya\s*haal|kya\s*chal\s*raha)\b/i.test(q) ||
+    /^(?:thanks|thank\s*you|shukriya|dhanyawad|ok|okay|cool|nice|great|thik\s*hai|theek\s*hai|sahi\s*hai|achha|acha)[!.]*$/i.test(q)
+  );
 
-    const result = await geminiModel.generateContent(userPrompt);
-    const responseText = result.response.text();
+  const productTerms = [
+    'laptop', 'computer', 'macbook', 'phone', 'mobile', 'smartphone', '5g', 'headphone', 'earphone',
+    'earbuds', 'tws', 'saree', 'kurti', 'lehenga', 'shirt', 'tshirt', 't-shirt', 'shoe', 'shoes',
+    'sneaker', 'watch', 'perfume', 'air fryer', 'blender', 'gym', 'fitness', 'dumbbell', 'yoga', 'bag', 'backpack'
+  ];
+  const hasProductKeywords = productTerms.some(term => q.includes(term));
 
-    let parsed;
-    try {
-      const jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/) || 
-                         responseText.match(/```\s*([\s\S]*?)```/);
-      const jsonStr = jsonMatch ? jsonMatch[1].trim() : responseText.trim();
-      parsed = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      console.warn('[Gemini] JSON parse failed, using raw text:', parseErr.message);
-      parsed = {
-        reply: responseText,
-        questionnaire: null,
-        suggestedFollowUpQueries: ["Top Gaming Laptops 🎮", "Best Deals Under ₹50,000", "Show My Cart 🛒"],
-        upsellPitch: null
+  if (isGreetingOrBanter && !hasProductKeywords) {
+    return {
+      state: ConversationState.GREETING,
+      intent: 'greeting',
+      shoppingIntent: false,
+      category: null,
+      requirementsComplete: false,
+      shouldSearchProducts: false
+    };
+  }
+
+  // 5. Coupons & Store Policies
+  const isCoupon = /\b(?:coupon|coupons|discount|discounts|promo|promo\s*code|offer|offers|vip100|first50)\b/i.test(q);
+  if (isCoupon && !hasProductKeywords) {
+    return {
+      state: ConversationState.COUPONS,
+      intent: 'coupons',
+      shoppingIntent: false,
+      category: null,
+      requirementsComplete: false,
+      shouldSearchProducts: false
+    };
+  }
+
+  const isPolicy = /\b(?:delivery|shipping|return|returns|refund|refunds|safe\s*hai|secure|razorpay|cod|guarantee)\b/i.test(q);
+  if (isPolicy && !hasProductKeywords) {
+    return {
+      state: ConversationState.POLICY,
+      intent: 'policy',
+      shoppingIntent: false,
+      category: null,
+      requirementsComplete: false,
+      shouldSearchProducts: false
+    };
+  }
+
+  // 6. Gibberish / Random letters check ("asdfgh", "ulla", "xyz123")
+  const isGibberish = !hasProductKeywords && (
+    /^(?:asdf|asdfgh|qwerty|zxcv|ulla|xyz|abcd|bla|blabla|\d+|[b-df-hj-np-tv-z]{5,})$/i.test(q) ||
+    (q.length < 15 && !/[aeiouy]/i.test(q) && !/hi|ok/i.test(q))
+  );
+  if (isGibberish) {
+    return {
+      state: ConversationState.UNCLEAR,
+      intent: 'unclear',
+      shoppingIntent: false,
+      category: null,
+      requirementsComplete: false,
+      shouldSearchProducts: false
+    };
+  }
+
+  // 7. Generic Shopping Intent Without Category ("I want to buy something", "Mujhe kuch kharidna hai", "I want something nice", "Suggest something")
+  const isGenericShoppingIntent = (
+    /^(?:i\s*want\s*to\s*buy\s*something|buy\s*something|kuch\s*kharidna\s*hai|mujhe\s*kuch\s*kharidna\s*hai|kuch\s*lena\s*hai|kuch\s*kharidna|shopping\s*karni\s*hai|i\s*want\s*something\s*nice|kuch\s*acha\s*dikhao|kuch\s*naya\s*dikhao|suggest\s*something|recommend\s*something)[?!.]*$/i.test(q) ||
+    ((q.includes("buy") || q.includes("kharidna") || q.includes("shopping") || q.includes("suggest") || q.includes("recommend")) && !hasProductKeywords)
+  );
+
+  if (isGenericShoppingIntent) {
+    return {
+      state: ConversationState.DISCOVERING_INTENT,
+      intent: 'discovering_intent',
+      shoppingIntent: true,
+      category: null,
+      requirementsComplete: false,
+      shouldSearchProducts: false
+    };
+  }
+
+  // 8. Category-Specific Query Detected (Query or Context)
+  let detectedCategory = null;
+  if (q.includes("laptop") || q.includes("computer") || q.includes("macbook") || q.includes("pc")) {
+    detectedCategory = "laptops";
+  } else if (q.includes("headphone") || q.includes("earphone") || q.includes("earbud") || q.includes("tws") || q.includes("speaker") || q.includes("audio")) {
+    detectedCategory = "headphones";
+  } else if (/\b(?:phone|phones|mobile|mobiles|smartphone|smartphones|5g)\b/i.test(q)) {
+    detectedCategory = "phones";
+  } else if (q.includes("saree") || q.includes("kurti") || q.includes("lehenga") || q.includes("ethnic") || q.includes("shirt") || q.includes("tshirt") || q.includes("t-shirt") || q.includes("dress") || q.includes("clothing")) {
+    detectedCategory = "fashion";
+  } else if (q.includes("shoe") || q.includes("shoes") || q.includes("sneaker") || q.includes("footwear")) {
+    detectedCategory = "footwear";
+  } else if (q.includes("gym") || q.includes("fitness") || q.includes("dumbbell") || q.includes("workout") || q.includes("yoga") || q.includes("massage gun")) {
+    detectedCategory = "fitness";
+  } else if (q.includes("air fryer") || q.includes("blender") || q.includes("mixer") || q.includes("kettle") || q.includes("appliance") || q.includes("kitchen")) {
+    detectedCategory = "appliances";
+  } else if (q.includes("watch") || q.includes("ghadi") || q.includes("smartwatch")) {
+    detectedCategory = "watches";
+  } else if (q.includes("perfume") || q.includes("fragrance") || q.includes("oud") || q.includes("attar") || q.includes("cologne")) {
+    detectedCategory = "fragrances";
+  } else if (q.includes("backpack") || q.includes("bag") || q.includes("luggage") || q.includes("wallet")) {
+    detectedCategory = "bags";
+  }
+
+  // If query does not name a category, retrieve the active category from conversational context
+  if (!detectedCategory) {
+    const contextualCategory = getActiveCategoryFromContext(userQuery, conversationHistory);
+    if (contextualCategory) {
+      detectedCategory = contextualCategory;
+    }
+  }
+
+  const userHasSpecified = hasUserSpecifiedRequirements(userQuery, conversationHistory);
+
+  if (detectedCategory) {
+    if (userHasSpecified) {
+      return {
+        state: ConversationState.REQUIREMENTS_COMPLETE,
+        intent: 'product_recommendation',
+        shoppingIntent: true,
+        category: detectedCategory,
+        requirementsComplete: true,
+        shouldSearchProducts: true
+      };
+    } else {
+      return {
+        state: ConversationState.COLLECTING_REQUIREMENTS,
+        intent: 'requirement_discovery',
+        shoppingIntent: true,
+        category: detectedCategory,
+        requirementsComplete: false,
+        shouldSearchProducts: false
       };
     }
-
-    // If user has already specified requirements, override questionnaire to null
-    if (userHasSpecified) {
-      parsed.questionnaire = null;
-    }
-
-    const hasQuestionnaire = Boolean(parsed.questionnaire);
-    const attachedProducts = hasQuestionnaire ? [] : topProducts;
-    const relatedProducts = hasQuestionnaire ? [] : getRelatedProductsForCategory(userQuery, attachedProducts);
-
-    return {
-      success: true,
-      reply: parsed.reply || responseText,
-      questionnaire: parsed.questionnaire || null,
-      products: attachedProducts,
-      relatedProducts: relatedProducts,
-      upsellPitch: hasQuestionnaire ? null : (parsed.upsellPitch || null),
-      campaign: {
-        title: "⚡ Flash Sale — Ending Soon!",
-        badge: "Extra ₹50 Off Applied",
-        urgencyText: "Only a few units left at wholesale rates — lock in your order! ⏳"
-      },
-      suggestedFollowUpQueries: parsed.suggestedFollowUpQueries || [
-        "Top Gaming Laptops 🎮",
-        "Show Electronics 💻",
-        "Explore Best Sellers ⭐",
-        "Show My Cart 🛒"
-      ],
-      poweredBy: "Infinity AI + Gemini"
-    };
-
-  } catch (err) {
-    console.error('[Gemini API Error]:', err.message);
-    return generateFallbackResponse(userQuery, topProducts, userHasSpecified);
   }
+
+  // Direct Consultative Advice Questions
+  if (q.includes("konsa lu") || q.includes("kaunsa lu") || q.includes("tere hisab se") || q.includes("kya lena chahiye") || q.includes("suggest kar ek")) {
+    return {
+      state: ConversationState.REQUIREMENTS_COMPLETE,
+      intent: 'advice',
+      shoppingIntent: true,
+      category: 'laptops',
+      requirementsComplete: true,
+      shouldSearchProducts: true
+    };
+  }
+
+  // Fallback for general text query
+  return {
+    state: ConversationState.UNCLEAR,
+    intent: 'unclear',
+    shoppingIntent: false,
+    category: null,
+    requirementsComplete: false,
+    shouldSearchProducts: false
+  };
 }
 
-// Robust fallback response with technical specifications in professional English
-function generateFallbackResponse(userQuery, matched = [], userHasSpecified = false) {
-  const q = userQuery.toLowerCase();
-  let reply = "";
-  let upsell = null;
-  let questionnaire = null;
+// Backward compatibility helper
+export function detectConversationalIntent(userQuery, conversationHistory = []) {
+  const analysis = analyzeConversationState(userQuery, conversationHistory);
+  return analysis.state;
+}
 
-  // If user has not specified details and it's a broad initial laptop query, show questionnaire ONCE
-  const isGenericLaptop = (q.includes("laptop") || q.includes("computer") || q.includes("notebook") || q.includes("macbook")) && !userHasSpecified;
+// Helper: Check for Impossible / Out-of-Catalog Budgets honestly
+export function checkImpossibleBudget(userQuery, numericBudget) {
+  if (!numericBudget || isNaN(numericBudget)) return null;
+  const q = (userQuery || "").toLowerCase();
 
-  if (isGenericLaptop) {
-    reply = `Welcome to **Infinity Store**! I am your Senior Personal Shopping Advisor.\n\nTo tailor the exact hardware configuration (Processor, Dedicated GPU, Display Refresh Rate, and RAM) for your workload, please select your primary requirement below or enter custom specifications:`;
-    questionnaire = {
-      title: "Select your usage & specifications or enter custom preferences:",
-      options: [
-        { id: "opt-1", label: "🎮 High-FPS Esports & Gaming (RTX 4070 / 4080, 240Hz Mini-LED)", value: "Gaming laptop with dedicated RTX 4070/4080 graphics, 240Hz Mini-LED display, and vapor chamber cooling" },
-        { id: "opt-2", label: "💻 Software Development & Multitasking (Core i7/i9, 32GB RAM)", value: "Programming and coding laptop with 32GB RAM and fast processor" },
-        { id: "opt-3", label: "💰 Value Budget Gaming & Office (RTX 4050 / Under ₹60,000)", value: "Best budget gaming laptop with RTX graphics under 60000" },
-        { id: "opt-4", label: "⚡ Ultra-Thin & Lightweight (OLED Display, 1.6kg & 12Hr Battery)", value: "Slim lightweight OLED laptop with 12 hour battery life" }
-      ],
-      customPlaceholder: "Or type custom requirements (e.g. 16GB RAM, Under ₹50,000)..."
-    };
-    upsell = {
-      title: "Pro Esports RGB Optical Gaming Mouse (7200 DPI)",
-      price: 399,
-      pitchMessage: "Pair your laptop with an ergonomic optical gaming mouse and mechanical keyboard for peak precision and comfort."
-    };
-  } else if (q.includes("laptop") || q.includes("computer") || q.includes("notebook") || q.includes("macbook") || q.includes("gaming")) {
-    // User already specified requirements: provide technical breakdown + show matched prototype products
-    questionnaire = null;
-    const topItem = matched[0] || {};
-    reply = `Here is the comprehensive specification breakdown for our top-recommended laptops matching your criteria! 💻🔥\n\n⚡ **Technical Specifications & Performance Highlights**:\n• **Processing Power**: High-performance multi-core architecture designed for high-load compiling, 4K rendering, and modern AAA gaming.\n• **Dedicated Graphics**: NVIDIA GeForce RTX Series with Ray Tracing, Tensor Cores, and DLSS 3.5 frame generation.\n• **Display Quality**: High-refresh rate IPS / OLED panel (up to 240Hz) with 100% sRGB/DCI-P3 color accuracy for crisp visuals.\n• **Thermal Engineering**: Dual-fan multi-heatpipe cooling system to maintain sustained boost clocks without thermal throttling.\n• **Memory & Storage**: Expandable dual-channel DDR5 RAM paired with high-speed PCIe Gen4 NVMe SSD.\n\n💰 **Best Available Deal**: Starting at **₹${topItem.price ? topItem.price.toLocaleString('en-IN') : '54,990'}** (MRP: ₹${topItem.originalPrice ? topItem.originalPrice.toLocaleString('en-IN') : '79,990'} — **Save ₹${topItem.originalPrice && topItem.price ? (topItem.originalPrice - topItem.price).toLocaleString('en-IN') : '25,000'}**).\n\n🛡️ **Buyer Protection**: Official Razorpay Payment Gateway (UPI, Cards, NetBanking), Free Express PAN-India Delivery, and 7-Day Easy Returns. **Explore the recommended models and essential complementary add-ons below!** 🛒`;
-    upsell = {
-      title: "Pro Esports RGB Optical Gaming Mouse (7200 DPI)",
-      price: 399,
-      pitchMessage: "We recommend pairing your laptop with our high-precision optical gaming mouse and mechanical keyboard for the ideal setup."
-    };
-  } else if (q.includes("phone") || q.includes("smartphone") || q.includes("mobile") || q.includes("5g")) {
-    questionnaire = null;
-    reply = `Here is the comprehensive specification breakdown for our top-tier smartphones! 📱✨\n\n⚡ **Engineered Specifications & Key Highlights**:\n• **Camera Sensor**: 108MP Pro OIS Primary Sensor with f/1.7 aperture — captures crisp low-light details and ultra-stable 4K video.\n• **Display**: 120Hz Curved AMOLED HDR10+ with 1300 nits peak brightness — sunlight-readable with ultra-fluid touch response.\n• **HyperCharge Architecture**: 67W/120W Turbo Flash Charge (0 to 100% in under 22 minutes) — never get stranded with a low battery.\n• **Connectivity**: Dual 5G SIM with 13 global bands for blazing low-latency speeds.\n\n💰 **Value Proposition**: Available starting at **₹${matched[0]?.price || '7,499'}** (MRP: ₹${matched[0]?.originalPrice || '14,999'} — **50% OFF** today).\n⏰ **Limited Units**: Promotional stock selling fast!\n\n💡 *Tip: Check out the complementary accessories below to protect your screen and enable ultra-fast GaN charging!* ⚡\n\n🛡️ **Zero Risk**: Official Razorpay Gateway + 7-Day Easy Returns. **Tap Add to Cart to secure your discount!** 🛒`;
-    upsell = {
-      title: "65W GaN Fast Charger with Braided Type-C Cable",
-      price: 299,
-      pitchMessage: "92% of smartphone buyers add this 65W GaN charger to power their device 3x faster than standard adapters."
-    };
-  } else if (q.includes("tshirt") || q.includes("t-shirt") || q.includes("shirt") || q.includes("polo") || q.includes("tee")) {
-    questionnaire = null;
-    reply = `Here is the fabric and material breakdown for our premium apparel collection! 👕🔥\n\n✨ **Material Specifications & Key Features**:\n• **Fabric Composition**: 100% Pure Bio-Washed Combed Cotton at **220 GSM** — ultra-durable heavyweight drape that maintains shape wash after wash.\n• **Silhouette**: Engineered Drop-Shoulder Oversized boxy cut — the modern standard for relaxed streetwear aesthetics.\n• **Breathability**: Pre-shrunk breathable knit delivers all-day comfort across all seasons.\n\n💰 **Special Deal**: Starting at only **₹${matched[0]?.price || '199'}** (MRP: ₹${matched[0]?.originalPrice || '699'} — **Flat 70% OFF**).\n\n🚚 **Free Delivery + 7-Day Easy Returns + Razorpay Protection**. **Explore matching bottomwear and footwear below!** 🛒`;
-    upsell = {
-      title: "6-Pocket Tactical Heavyweight Cargo Pants",
-      price: 399,
-      pitchMessage: "Pair this oversized T-shirt with our heavyweight 6-pocket cargo pants for a complete streetwear aesthetic look."
-    };
-  } else if (q.includes("saree") || q.includes("wedding") || q.includes("lehenga") || q.includes("kurti")) {
-    questionnaire = null;
-    reply = `Here is the craft and fabric specification review for our Royal Festive collection! 👗✨\n\n🌟 **Craftsmanship Specifications & Highlights**:\n• **Textile**: Pure Banarasi Art Silk with intricate Heavy Golden Zari Pallu — delivers an elegant shimmer under festive lighting.\n• **Drape Dynamics**: Lightweight 5.5m saree + 0.8m unstitched designer blouse piece — drapes effortlessly with structured pleats.\n• **Occasion Versatility**: Tailored for weddings, festive ceremonies, and grand evening receptions.\n\n💰 **Pricing**: Wholesale starting at **₹${matched[0]?.price || '249'}** (Boutique MRP: ₹${matched[0]?.originalPrice || '1,499'} — **Up to 80% OFF**).\n\n🛡️ **100% Safe Checkout via Razorpay + 7-Day Doorstep Returns**. **Check out the matching temple jewelry and designer clutches below!** 🛒`;
-    upsell = {
-      title: "Traditional 24K Gold Plated Temple Choker Jewellery Set",
-      price: 249,
-      pitchMessage: "Pair this royal saree with our matching 24K Temple Gold Choker set for a complete, regal festive look."
-    };
-  } else if (q.includes("shoe") || q.includes("sneaker") || q.includes("footwear") || q.includes("sandal")) {
-    questionnaire = null;
-    reply = `Here is the ergonomic specification breakdown for our top-rated footwear! 👟🔥\n\n☁️ **Ergonomic Specifications & Key Features**:\n• **Midsole Technology**: High-rebound Air-Cushion EVA Sole — absorbs impact shock and relieves heel pressure during all-day walking.\n• **Upper Construction**: Breathable knit mesh with reinforced overlays — delivers flexibility, ventilation, and athletic styling.\n• **Traction**: Anti-skid rubberized grooved outsole for confident grip on all indoor and outdoor surfaces.\n\n💰 **Special Rate**: Starting at **₹${matched[0]?.price || '299'}** (Retail: ₹${matched[0]?.originalPrice || '1,299'} — **75% OFF**).\n\n🛡️ **Hassle-Free Size Exchange + 7-Day Returns + Razorpay Protection**. **Explore related memory foam insoles and socks below!** 🛒`;
-    upsell = {
-      title: "Orthopedic Memory Foam Cloud Insoles (Set of 2 Pairs)",
-      price: 149,
-      pitchMessage: "Bundle these shoes with memory foam cloud insoles for custom arch support and all-day walking comfort."
-    };
-  } else {
-    questionnaire = null;
-    reply = `I have scanned our catalog and curated recommendations matching your query **"${userQuery}"**! 🛍️✨\n\n🏆 **Specification & Value Highlights**:\n• **Verified Build Quality**: Every curated match features high-grade materials, manufacturer quality verification, and reliable performance.\n• **Top Customer Ratings**: Rated 4.5★+ average across thousands of verified customer reviews.\n• **Maximum Value**: Locked at factory-direct pricing with **up to 70% OFF** + **Extra ₹50 First-Order Discount (Code: FIRST50)**.\n\n🛡️ **Protected By Razorpay**: 100% Encrypted Transactions + Free Express Delivery + 7-Day Easy Returns.\n\n**Explore the specifications and complementary accessories below!** 🛒`;
-    upsell = {
-      title: "Wireless Bluetooth 5.3 Deep Bass Neckband",
-      price: 299,
-      pitchMessage: "Enjoy 60-hour playtime and ENC crystal-clear calling with our top-rated wireless neckband."
-    };
+  // Laptop minimums in catalog: Budget laptops start at ₹24,990; Gaming laptops at ₹37,490
+  if (q.includes("gaming laptop") || (q.includes("laptop") && (q.includes("game") || q.includes("gaming") || q.includes("rtx")))) {
+    if (numericBudget < 25000) {
+      return {
+        isImpossible: true,
+        categoryName: "gaming laptops",
+        categoryNameHindi: "gaming laptops",
+        minPrice: 37490,
+        requestedBudget: numericBudget
+      };
+    }
+  } else if (q.includes("laptop") || q.includes("computer") || q.includes("macbook")) {
+    if (numericBudget < 15000) {
+      return {
+        isImpossible: true,
+        categoryName: "laptops",
+        categoryNameHindi: "laptops",
+        minPrice: 24990,
+        requestedBudget: numericBudget
+      };
+    }
+  } else if (q.includes("phone") || q.includes("smartphone") || q.includes("5g")) {
+    if (numericBudget < 3000) {
+      return {
+        isImpossible: true,
+        categoryName: "5G smartphones",
+        categoryNameHindi: "5G smartphones",
+        minPrice: 7499,
+        requestedBudget: numericBudget
+      };
+    }
   }
 
-  const attachedProducts = questionnaire ? [] : matched;
-  const relatedProducts = questionnaire ? [] : getRelatedProductsForCategory(userQuery, attachedProducts);
+  return null;
+}
+
+// Dedicated Questionnaire & Structured Requirements Submission Processor
+export async function processAIAgentRequirements({
+  requirementSessionId,
+  category = "laptops",
+  requirements = {},
+  history = [],
+  cartContext = [],
+  userProfile = {}
+}) {
+  const catKey = (category || "").toLowerCase();
+  let normalizedCategory = "laptops";
+  if (catKey.includes("laptop") || catKey.includes("computer")) normalizedCategory = "laptops";
+  else if (catKey.includes("headphone") || catKey.includes("audio") || catKey.includes("earbud")) normalizedCategory = "headphones";
+  else if (catKey.includes("phone") || catKey.includes("mobile") || catKey.includes("smart")) normalizedCategory = "phones";
+  else if (catKey.includes("fashion") || catKey.includes("ethnic") || catKey.includes("saree") || catKey.includes("clothing")) normalizedCategory = "fashion";
+  else if (catKey.includes("footwear") || catKey.includes("shoe")) normalizedCategory = "footwear";
+  else if (catKey.includes("fitness") || catKey.includes("gym")) normalizedCategory = "fitness";
+  else if (catKey.includes("appliance") || catKey.includes("kitchen")) normalizedCategory = "appliances";
+  else if (catKey.includes("watch")) normalizedCategory = "watches";
+  else if (catKey.includes("fragrance") || catKey.includes("perfume")) normalizedCategory = "fragrances";
+  else if (catKey.includes("bag") || catKey.includes("luggage")) normalizedCategory = "bags";
+
+  const priorities = Array.isArray(requirements.priorities) ? requirements.priorities : [];
+  const customReq = requirements.customRequirements || requirements.customInput || "";
+  const budget = requirements.isBudgetActive && requirements.budget ? Number(requirements.budget) : null;
+  const isBudgetActive = Boolean(requirements.isBudgetActive && budget);
+
+  const queryComposite = [
+    normalizedCategory,
+    priorities.join(" "),
+    customReq,
+    isBudgetActive && budget ? `under ${budget}` : ''
+  ].filter(Boolean).join(" ");
+
+  const stateAnalysis = {
+    state: ConversationState.REQUIREMENTS_COMPLETE,
+    intent: 'product_recommendation',
+    shoppingIntent: true,
+    category: normalizedCategory,
+    requirementsComplete: true,
+    shouldSearchProducts: true
+  };
+
+  const detectedReqs = {
+    category: normalizedCategory,
+    intent: priorities.join(" & ") || 'Custom Specs',
+    budgetConstraint: isBudgetActive && budget ? `Under ₹${budget.toLocaleString('en-IN')}` : 'Flexible Budget',
+    numericBudget: budget,
+    isBudgetActive,
+    priorities,
+    customRequirements: customReq
+  };
+
+  // Retrieve matching products via structured catalog search
+  const matched = searchProductsLocally({
+    category: normalizedCategory,
+    priorities,
+    requirements: priorities,
+    customRequirements: customReq,
+    budget,
+    isBudgetActive,
+    query: queryComposite
+  });
+
+  const topProducts = matched.slice(0, 5);
+
+  const contextPackage = buildContextPackage(
+    queryComposite,
+    history,
+    cartContext,
+    userProfile,
+    stateAnalysis,
+    detectedReqs
+  );
+
+  if (genAI) {
+    const geminiResult = await callGeminiWithContext(contextPackage, topProducts);
+    if (geminiResult && geminiResult.message) {
+      const enrichedProducts = topProducts.length > 0 ? enrichProductsWithRequirementMatch(topProducts, detectedReqs, queryComposite) : [];
+      const relatedProducts = topProducts.length > 0 ? getRelatedProductsForCategory(queryComposite, enrichedProducts) : [];
+
+      let upsell = null;
+      if (topProducts.length > 0) {
+        if (normalizedCategory === "laptops") {
+          upsell = {
+            title: "Pro Esports RGB Optical Gaming Mouse (7200 DPI)",
+            price: 399,
+            pitchMessage: "Pairs with your high-performance laptop setup."
+          };
+        } else if (normalizedCategory === "phones") {
+          upsell = {
+            title: "65W GaN Fast Charger with Braided Type-C Cable",
+            price: 299,
+            pitchMessage: "Powers your smartphone up to 3x faster."
+          };
+        }
+      }
+
+      return {
+        success: true,
+        state: ConversationState.REQUIREMENTS_COMPLETE,
+        reply: geminiResult.message,
+        text: geminiResult.message,
+        products: enrichedProducts,
+        relatedProducts: relatedProducts,
+        upsellPitch: upsell,
+        suggestedFollowUpQueries: geminiResult.suggestedFollowUpQueries || ["Show My Cart 🛒", "Proceed to Checkout ⚡", "Top Deals Today 🔥"]
+      };
+    }
+  }
+
+  return generateFallbackResponse(
+    queryComposite,
+    topProducts,
+    true,
+    userProfile,
+    'PRODUCT_QUERY',
+    detectedReqs
+  );
+}
+
+// Build complete, structured context package on every request
+export function buildContextPackage(userQuery, conversationHistory = [], cartContext = [], userProfile = {}, stateAnalysis = {}, detectedReqs = {}) {
+  return {
+    assistantRole: "Infinity Store AI Shopping Assistant",
+    websiteContext: {
+      name: "Infinity Store",
+      purpose: "AI-powered shopping assistant with 1,00,250+ structured catalog products",
+      availableCategories: [
+        "Laptops & Tech",
+        "5G Smartphones & Gadgets",
+        "Wireless Audio & Noise Cancelling Headphones",
+        "Festive Sarees, Kurtis & Ethnic Wear",
+        "Men Fashion & Streetwear",
+        "Footwear & Athletic Shoes",
+        "Home & Smart Kitchen Appliances",
+        "Fitness, Dumbbells & Training Gear",
+        "Watches & Accessories",
+        "Luxury Fragrances & Perfumes",
+        "Bags, Backpacks & Luggage"
+      ],
+      storePolicies: {
+        shipping: "Free Express Delivery PAN-India across 28,000+ pincodes",
+        payments: "100% Secure Razorpay 256-bit Encrypted Payments (UPI, Cards, NetBanking)",
+        returns: "7-Day Easy Returns with instant doorstep pickup and refund",
+        coupons: "FIRST50 (Flat ₹50 OFF 1st order), VIP100 (Flat ₹100 OFF above ₹499)"
+      }
+    },
+    conversationState: {
+      state: stateAnalysis.state || ConversationState.GREETING,
+      shoppingIntent: stateAnalysis.shoppingIntent || false,
+      category: stateAnalysis.category || null,
+      subcategory: null,
+      requirementsComplete: stateAnalysis.requirementsComplete || false
+    },
+    requirements: {
+      selected: detectedReqs.keySpecsMatched || [],
+      priorities: detectedReqs.priorities || [],
+      budget: detectedReqs.numericBudget || null,
+      isBudgetActive: Boolean(detectedReqs.isBudgetActive && detectedReqs.numericBudget),
+      customRequirements: detectedReqs.customRequirements || ""
+    },
+    cartContext: (cartContext || []).map(c => ({
+      id: c.id,
+      title: c.title,
+      category: c.category,
+      price: c.price
+    })),
+    userProfile: {
+      learnedInterests: userProfile?.learnedInterests || [],
+      preferredBudget: userProfile?.preferredBudget || "Flexible"
+    },
+    conversationHistory: (conversationHistory || []).slice(-8).map(m => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      message: m.text || m.content || m.message || ''
+    })),
+    currentUserMessage: userQuery,
+    availableActions: [
+      "chat",
+      "ask_requirement",
+      "search_products",
+      "recommend_products",
+      "cart",
+      "checkout"
+    ]
+  };
+}
+
+// Call Gemini with full context package to generate dynamic response and structured decisions
+export async function callGeminiWithContext(contextPackage, candidateProducts = [], image = null) {
+  if (!genAI) return null;
+
+  const productContext = candidateProducts.length > 0
+    ? candidateProducts.map((p, i) => `[Product #${i + 1}] "${p.title}" | Price: Rs.${p.price} (MRP Rs.${p.originalPrice || p.price}) | Rating: ${p.rating}★ | Specs: ${p.fabric || p.description || ''} | SubCat: ${p.subCategory || ''}`).join('\n')
+    : "NO PRODUCTS RETRIEVED (Conversational / Intent Discovery / Requirement Phase).";
+
+  const systemInstruction = `You are Infinity Store's AI shopping assistant.
+Your job is to help users discover and purchase products available on Infinity Store (1,00,250+ structured catalog products).
+You are conversational, helpful, grounded, and natural.
+You are NOT a generic AI assistant. You must stay strictly within the shopping domain.
+
+CORE INSTRUCTIONS:
+1. Generate EVERY conversational response dynamically. Never use predefined or hardcoded response templates.
+2. The store UI is English, but your conversational language MUST naturally match the user's language (English, Hindi, or natural Hinglish).
+3. If the user attaches/uploads an image of a product, visually analyze the product (category, type, style, color, pattern, material, brand) and recommend closely matching or exact products from Infinity Store catalog.
+4. If the user is simply greeting or casual chatting (e.g. "Hello", "How are you", "Hello bhai kesa hai kya kr skta hai tu"), converse warmly and explain your capabilities as Infinity AI. DO NOT dump or show product cards on greetings.
+5. If the user expresses a general desire to buy something without naming a category ("I want to buy something", "kuch kharidna hai"), ask what kind of product they are looking for.
+6. If the user asks a non-shopping question (e.g. coding, C++ binary search, homework, medical, legal), politely refuse and redirect to shopping in their language.
+7. When the user identifies a broad category (e.g. "I need a laptop", "show me phones", "I want headphones", "saree dikhao") for the first time without specific features, provide a dynamic multi-select specification questionnaire tailored specifically to that product category. Do not ask questionnaires multiple times.
+8. When user gives complete requirements or submits questionnaire, explain concisely WHY each product matches the user's specific requirements using ONLY real structured facts from the candidate products. Never invent ratings, review counts, discounts, or delivery guarantees.
+9. If the user sets an impossible budget for a category (e.g. gaming laptop under ₹5,000), explain that no options exist in the catalog within that budget, mention the minimum starting price (e.g. ₹37,490 for gaming laptops), and ask if they'd like to adjust their budget.
+10. For cart actions (remove item, show cart, checkout), generate natural confirmation messages and set agentAction.
+
+Always return strict JSON format:
+{
+  "message": "Your natural markdown response dynamically generated in user's language without any predefined templates",
+  "language": "hinglish" | "english" | "hindi",
+  "intent": "greeting" | "shopping" | "scope_guard" | "cart_action" | "requirement_discovery" | "product_recommendation" | "advice" | "unclear",
+  "state": "GREETING" | "DISCOVERING_INTENT" | "COLLECTING_REQUIREMENTS" | "REQUIREMENTS_COMPLETE" | "CART_ACTION" | "NON_COMMERCE" | "UNCLEAR",
+  "category": "laptops" | "phones" | "headphones" | "fashion" | "footwear" | "fitness" | "appliances" | "watches" | "fragrances" | "bags" | null,
+  "requirementsComplete": boolean,
+  "shouldSearchProducts": boolean,
+  "shouldAskQuestion": boolean,
+  "questionnaire": {
+    "title": "Category-specific title",
+    "options": [
+      { "id": "opt-1", "label": "Option label with specs", "value": "Option value" }
+    ],
+    "customPlaceholder": "Enter any specific requirement, feature, brand, specification, or preference..."
+  } | null,
+  "requirements": {
+    "priorities": ["priority1", "priority2"],
+    "budget": number | null
+  },
+  "agentAction": {
+    "type": "REMOVE_FROM_CART" | "SHOW_CART" | "INITIATE_CHECKOUT",
+    "target": "item keyword or all"
+  } | null,
+  "suggestedFollowUpQueries": ["Option 1", "Option 2", "Option 3", "Option 4"]
+}`;
+
+  const prompt = `COMPLETE APPLICATION CONTEXT PACKAGE:
+${JSON.stringify(contextPackage, null, 2)}
+
+CANDIDATE PRODUCTS FROM INVENTORY:
+${productContext}
+
+Analyze the user message, context package, and candidate inventory. ${image ? "Also analyze the user's uploaded product image visually to identify the category, style, and features." : ""} Return the structured JSON with your dynamic conversational message.`;
+
+  // Build multimodal parts
+  const promptParts = [{ text: prompt }];
+  if (image && typeof image === 'string') {
+    try {
+      let mimeType = "image/jpeg";
+      let base64Data = image;
+      if (image.startsWith("data:")) {
+        const matches = image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+        if (matches) {
+          mimeType = matches[1];
+          base64Data = matches[2];
+        }
+      }
+      promptParts.push({
+        inlineData: {
+          mimeType: mimeType,
+          data: base64Data
+        }
+      });
+    } catch (imgErr) {
+      console.warn("[Gemini] Failed to attach image part:", imgErr.message);
+    }
+  }
+
+  const modelCandidates = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+
+  for (const modelName of modelCandidates) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: [{ parts: promptParts }],
+          generationConfig: {
+            response_mime_type: "application/json"
+          }
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) || text.match(/```\s*([\s\S]*?)```/);
+        const jsonStr = jsonMatch ? jsonMatch[1].trim() : text.trim();
+        return JSON.parse(jsonStr);
+      }
+    } catch (e) {
+      console.warn(`[Gemini] ${modelName} call failed:`, e.message);
+    }
+  }
+
+  return null;
+}
+
+// Main AI Agent Query Processing Function
+export async function processAIAgentQuery(userQuery, conversationHistory = [], cartContext = [], userProfile = {}, image = null) {
+  const stateAnalysis = analyzeConversationState(userQuery, conversationHistory, cartContext, userProfile);
+  const detectedReqs = extractDetailedRequirements(userQuery, conversationHistory);
+  const impossibleBudget = checkImpossibleBudget(userQuery, detectedReqs.numericBudget);
+
+  // If user uploaded an image, treat it as direct product discovery/recommendation
+  if (image) {
+    stateAnalysis.state = ConversationState.REQUIREMENTS_COMPLETE;
+    stateAnalysis.requirementsComplete = true;
+    stateAnalysis.shouldSearchProducts = true;
+  }
+
+  let candidateProducts = [];
+  if (impossibleBudget && impossibleBudget.isImpossible) {
+    stateAnalysis.state = ConversationState.COLLECTING_REQUIREMENTS;
+    stateAnalysis.requirementsComplete = false;
+    stateAnalysis.shouldSearchProducts = false;
+    candidateProducts = [];
+  } else if (stateAnalysis.state === ConversationState.REQUIREMENTS_COMPLETE || stateAnalysis.shouldSearchProducts) {
+    const rawMatches = searchProductsLocally({
+      category: stateAnalysis.category || (image ? "all" : "laptops"),
+      query: userQuery,
+      budget: detectedReqs.numericBudget,
+      isBudgetActive: Boolean(detectedReqs.numericBudget)
+    });
+    candidateProducts = rawMatches.slice(0, 5);
+  }
+
+  const contextPackage = buildContextPackage(
+    userQuery,
+    conversationHistory,
+    cartContext,
+    userProfile,
+    stateAnalysis,
+    detectedReqs
+  );
+  if (impossibleBudget && impossibleBudget.isImpossible) {
+    contextPackage.impossibleBudget = impossibleBudget;
+  }
+  if (image) {
+    contextPackage.hasUploadedImage = true;
+  }
+
+  // 1. Invoke Gemini with Full Context Package & Image
+  if (genAI) {
+    const geminiResult = await callGeminiWithContext(contextPackage, candidateProducts, image);
+    if (geminiResult && geminiResult.message) {
+      const finalState = impossibleBudget?.isImpossible ? ConversationState.COLLECTING_REQUIREMENTS : (geminiResult.state || stateAnalysis.state);
+      const shouldShow = !impossibleBudget?.isImpossible && (geminiResult.shouldSearchProducts || finalState === ConversationState.REQUIREMENTS_COMPLETE) && candidateProducts.length > 0;
+
+      // If questionnaire needed for category
+      let questionnaire = geminiResult.questionnaire;
+      if (finalState === ConversationState.COLLECTING_REQUIREMENTS && !questionnaire && !impossibleBudget?.isImpossible) {
+        questionnaire = getInteractiveQuestionnaireForCategory(userQuery);
+      }
+
+      const enrichedProducts = shouldShow ? enrichProductsWithRequirementMatch(candidateProducts, detectedReqs, userQuery) : [];
+      const relatedProducts = shouldShow ? getRelatedProductsForCategory(userQuery, enrichedProducts) : [];
+
+      let inChatCheckout = null;
+      if (geminiResult.agentAction?.type === "SHOW_CART" || geminiResult.agentAction?.type === "INITIATE_CHECKOUT") {
+        inChatCheckout = {
+          ready: true,
+          message: "Payment Gateway Ready! Secure 1-Click Pay with Razorpay:",
+          actionText: "⚡ Pay Now with Razorpay"
+        };
+      }
+
+      return {
+        success: true,
+        state: finalState,
+        reply: geminiResult.message,
+        text: geminiResult.message,
+        agentAction: geminiResult.agentAction || null,
+        questionnaire: questionnaire || null,
+        products: enrichedProducts,
+        relatedProducts: relatedProducts,
+        inChatCheckout: inChatCheckout,
+        suggestedFollowUpQueries: geminiResult.suggestedFollowUpQueries || (questionnaire ? questionnaire.options.slice(0, 4).map(o => o.label || o.value) : ["Show My Cart 🛒", "Top Deals Today 🔥"])
+      };
+    }
+  }
+
+  // 2. Dynamic Fallback Generation (Used only if Gemini API is unreachable)
+  return generateDynamicFallback(userQuery, stateAnalysis, detectedReqs, candidateProducts, conversationHistory, cartContext, userProfile);
+}
+
+// Graceful dynamic fallback generator for network/API outages
+function generateDynamicFallback(userQuery, stateAnalysis, detectedReqs, candidateProducts, conversationHistory, cartContext, userProfile) {
+  const isHindi = isHindiOrHinglish(userQuery);
+  const q = userQuery.toLowerCase().trim();
+  const impossibleBudget = checkImpossibleBudget(userQuery, detectedReqs.numericBudget);
+  let reply = "";
+  let questionnaire = null;
+  let products = [];
+  let relatedProducts = [];
+  let agentAction = null;
+  let inChatCheckout = null;
+
+  if (impossibleBudget && impossibleBudget.isImpossible) {
+    reply = isHindi
+      ? `Infinity Store par ${impossibleBudget.categoryNameHindi} ₹${impossibleBudget.minPrice.toLocaleString('en-IN')} se start hote hain. ₹${impossibleBudget.requestedBudget.toLocaleString('en-IN')} ke budget mein koi ${impossibleBudget.categoryNameHindi} available nahi hai. Kya aap ₹${impossibleBudget.minPrice.toLocaleString('en-IN')} ya usse upar ke options dekhna chahenge?`
+      : `In our catalog, ${impossibleBudget.categoryName} start at ₹${impossibleBudget.minPrice.toLocaleString('en-IN')}. We don't have models under ₹${impossibleBudget.requestedBudget.toLocaleString('en-IN')}. Would you like to explore options starting at ₹${impossibleBudget.minPrice.toLocaleString('en-IN')}?`;
+  } else if (stateAnalysis.state === ConversationState.NON_COMMERCE) {
+    reply = isHindi
+      ? "Main sirf Infinity Store par products aur shopping mein aapki help karta hoon. Aap bataiye aapko kya kharidna hai, main best options dhoondh ke dunga! 😊"
+      : "I'm focused on helping you shop on Infinity Store. Tell me what product or category you're looking for and I'll help you find the right match!";
+  } else if (stateAnalysis.state === ConversationState.IDENTITY) {
+    reply = isHindi
+      ? "Main **Infinity AI** hoon — aapka personal shopping assistant! 🤖✨ Main aapko 1,00,250+ catalog products mein se perfect items dhoondhne aur Razorpay se safe payment karne mein help karta hoon.\n\nAap batayein, aaj kya dekhna chahenge?"
+      : "Hey! I'm your **Infinity AI** shopping assistant! 🤖✨ Tell me what product or category you're looking for, and I'll help you discover the perfect match from our 1,00,250+ product catalog.";
+  } else if (stateAnalysis.state === ConversationState.GREETING) {
+    const isHowAreYou = /how\s*are\s*you|kaise\s*ho|kya\s*haal|kesa\s*hai|kaisa\s*hai/i.test(q);
+    reply = isHowAreYou
+      ? (isHindi ? "Main badhiya hoon! Main aapki shopping mein kya madad kar sakta hoon? Bataiye aaj kya dekhna chahenge?" : "I'm doing great! What can I help you shop for today?")
+      : (isHindi ? "Hey! Aap aaj kya kharidna chahte hain? (Jaise Laptops, Smartphones, Festive Sarees, Headphones ya Shoes)" : "Hey! What are you looking to buy today?");
+  } else if (stateAnalysis.state === ConversationState.DISCOVERING_INTENT) {
+    reply = isHindi
+      ? "Haan, bilkul! Aap kya kharidna chahte hain? (Jaise: Laptops, Smartphones, Festive Wear, Headphones, ya Fitness Gear?)"
+      : "Sure! What are you looking to buy today? (e.g. Laptops, Smartphones, Festive Wear, Headphones, or Fitness Gear)";
+  } else if (stateAnalysis.state === ConversationState.COLLECTING_REQUIREMENTS) {
+    questionnaire = getInteractiveQuestionnaireForCategory(userQuery);
+    reply = isHindi
+      ? "Bilkul! Aapke liye best matches nikalne ke liye bas neeche apni requirements tick karein ya custom budget/specs type karein 👇"
+      : "I'd love to help you find the perfect match! Please select your specifications from the options below or enter custom details 👇";
+  } else if (stateAnalysis.state === ConversationState.REQUIREMENTS_COMPLETE && candidateProducts.length > 0) {
+    products = enrichProductsWithRequirementMatch(candidateProducts, detectedReqs, userQuery);
+    relatedProducts = getRelatedProductsForCategory(userQuery, products);
+    reply = isHindi
+      ? `Aapki requirement **${detectedReqs.intent || 'Performance'}** (${detectedReqs.budgetConstraint || 'Best Value'}) ke hisaab se top matched options nikal liye hain! 💻🔥 Neeche review karein:`
+      : `I have matched the top products for your requirement **${detectedReqs.intent || 'Performance'}** (${detectedReqs.budgetConstraint || 'Best Value'})! Explore curated matches below:`;
+  } else if (stateAnalysis.state === ConversationState.CART_ACTION) {
+    const isRemove = stateAnalysis.intent === 'remove_from_cart';
+    if (isRemove) {
+      reply = isHindi ? "Item aapke cart se hata diya gaya hai." : "Item has been removed from your cart.";
+      agentAction = { type: "REMOVE_FROM_CART", target: "all" };
+    } else {
+      reply = isHindi ? "Ye raha aapka live cart summary:" : "Here is your live cart summary:";
+      agentAction = { type: "SHOW_CART" };
+      inChatCheckout = { ready: true, message: "Proceed with Razorpay checkout:", actionText: "Proceed to Razorpay Payment ⚡" };
+    }
+  } else {
+    reply = isHindi
+      ? "Sorry, mujhe samajh nahi aaya. Aap bataiye aapko kis product ya category mein help chahiye? 😊"
+      : "Sorry, I didn't quite understand that. Could you tell me what product or category you'd like to shop for? 😊";
+  }
 
   return {
     success: true,
+    state: stateAnalysis.state,
     reply,
+    text: reply,
+    agentAction,
     questionnaire,
-    products: attachedProducts,
-    relatedProducts: relatedProducts,
-    upsellPitch: questionnaire ? null : upsell,
-    campaign: {
-      title: "⚡ Flash Sale — Ending Soon!",
-      badge: "Extra ₹50 Off Applied",
-      urgencyText: "Only a few units left at wholesale rates — lock in your order! ⏳"
-    },
-    suggestedFollowUpQueries: [
-      "Add to Cart 🛒",
-      "Proceed to Razorpay Checkout ⚡",
-      "Compare Specifications 🔍",
-      "Best Deals Under ₹50,000 💰"
-    ],
-    poweredBy: "Infinity AI"
+    products,
+    relatedProducts,
+    inChatCheckout,
+    suggestedFollowUpQueries: questionnaire ? questionnaire.options.slice(0, 4).map(o => o.label) : ["Laptops & Tech 💻", "5G Smartphones 📱", "Show My Cart 🛒"]
   };
+}
+
+// Legacy fallback response adapter
+function generateFallbackResponse(userQuery, topProducts = [], shouldShowProducts = false, userProfile = {}, intentType = 'PRODUCT_QUERY', detectedReqs = {}) {
+  const stateAnalysis = { state: ConversationState.REQUIREMENTS_COMPLETE, shouldSearchProducts: true };
+  return generateDynamicFallback(userQuery, stateAnalysis, detectedReqs, topProducts, [], [], userProfile);
+}
+
+/**
+ * Server-Sent Events (SSE) AI Streaming Endpoint Handler
+ * Event Types: status, message, question, products, action, done, error
+ */
+export async function streamAIAgentQuery(userQuery, conversationHistory = [], cartContext = [], userProfile = {}, image = null, sessionId = "default_session", res) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  let isConnected = true;
+  res.on('close', () => {
+    isConnected = false;
+  });
+
+  const sendEvent = (event, data) => {
+    if (!isConnected) return;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    sendEvent('status', { message: 'Infinity AI is understanding your request...' });
+
+    // 1. Execute AI commerce pipeline
+    const result = await processAIAgentQuery(userQuery, conversationHistory, cartContext, userProfile, image, sessionId);
+
+    if (!isConnected) return;
+
+    // 2. Stream Conversational Text Progressively (event: message)
+    const replyText = result.reply || result.text || "";
+    const words = replyText.split(' ');
+    for (let i = 0; i < words.length; i += 2) {
+      if (!isConnected) break;
+      const chunk = words.slice(i, i + 2).join(' ') + (i + 2 < words.length ? ' ' : '');
+      sendEvent('message', { text: chunk });
+      await new Promise(r => setTimeout(r, 20));
+    }
+
+    if (!isConnected) return;
+
+    // 3. Emit Structured Events (question, products, action, done)
+    if (result.questionnaire) {
+      sendEvent('question', result.questionnaire);
+    }
+
+    if (result.products && result.products.length > 0) {
+      sendEvent('products', {
+        products: result.products,
+        relatedProducts: result.relatedProducts || []
+      });
+    }
+
+    if (result.agentAction) {
+      sendEvent('action', result.agentAction);
+    }
+
+    sendEvent('done', {
+      success: true,
+      state: result.state,
+      products: result.products || [],
+      relatedProducts: result.relatedProducts || [],
+      questionnaire: result.questionnaire || null,
+      agentAction: result.agentAction || null,
+      inChatCheckout: result.inChatCheckout || null,
+      suggestedFollowUpQueries: result.suggestedFollowUpQueries || [],
+      updatedUserProfile: result.updatedUserProfile || null,
+      fullText: replyText
+    });
+
+    res.end();
+  } catch (err) {
+    console.error('[AI Stream Error]:', err);
+    if (isConnected) {
+      sendEvent('error', { error: err.message || 'Stream processing error' });
+      res.end();
+    }
+  }
 }

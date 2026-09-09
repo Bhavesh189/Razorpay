@@ -1,33 +1,103 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { allProducts, categoryHierarchy, productsById } from './data/products/index.js';
-import { processAIAgentQuery } from './services/aiService.js';
-import { createRazorpayOrder, verifyRazorpayPayment, getRazorpayKeyId } from './services/paymentService.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 dotenv.config();
+
+import { allProducts, categoryHierarchy, productsById } from './data/products/index.js';
+import { ProductSearchEngine } from './search/SearchEngine.js';
+import { processAIAgentQuery, processAIAgentRequirements, setSearchEngine, clearSessionState, streamAIAgentQuery } from './services/aiService.js';
+import { createRazorpayOrder, verifyRazorpayPayment, getRazorpayKeyId, processRazorpayWebhook, recordFrontendPaymentVerification, PaymentState } from './services/paymentService.js';
+import { redisService } from './services/redisService.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Initialize High-Performance DSA Search Engine (Inverted Index + Trie + BKTree + MinHeap)
+const searchEngine = new ProductSearchEngine(allProducts);
+
+// Inject unified search engine into AI Commerce Service
+setSearchEngine(searchEngine);
+
+// Request ID & Tracing Logger
+app.use((req, res, next) => {
+  const reqId = req.headers['x-request-id'] || `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  req.id = reqId;
+  res.setHeader('X-Request-ID', reqId);
+
+  const start = performance.now();
+  res.on('finish', () => {
+    const duration = (performance.now() - start).toFixed(1);
+    if (!req.path.startsWith('/health')) {
+      console.log(`📡 [${req.method}] ${req.originalUrl || req.url} - ${res.statusCode} (${duration}ms) [${req.id}]`);
+    }
+  });
+  next();
+});
+
 // Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  limit: '20mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// 1. AI Agentic Search & Shopping Chat Endpoint (Multilingual, 10k+ catalog, Upsell booster)
+// 0. AI Response Streaming Endpoint (Server-Sent Events)
+app.post('/api/ai/chat/stream', async (req, res) => {
+  try {
+    const { query = "", history = [], cartContext = [], userProfile = {}, image = null, sessionId = null } = req.body;
+    const activeSessionId = sessionId || req.headers['x-session-id'] || "default_session";
+    await streamAIAgentQuery(query, history, cartContext, userProfile, image, activeSessionId, res);
+  } catch (error) {
+    console.error('[AI Stream Error]:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+});
+
+// 0.5 Razorpay Server-to-Server Webhook Endpoint (Idempotent & Signature-Verified)
+app.post('/api/webhooks/razorpay', async (req, res) => {
+  try {
+    const signature = req.headers['x-razorpay-signature'];
+    const eventId = req.headers['x-razorpay-event-id'] || req.body?.id;
+    const rawBody = req.rawBody || JSON.stringify(req.body);
+
+    const result = await processRazorpayWebhook(req.body, eventId, rawBody, signature);
+    return res.status(result.statusCode || 200).json(result);
+  } catch (error) {
+    console.error('[Razorpay Webhook Error]:', error);
+    return res.status(500).json({ success: false, error: 'WEBHOOK_ERROR', message: error.message });
+  }
+});
+
+// 1. AI Agentic Search & Shopping Chat Endpoint (Multilingual, 125k+ catalog, Upsell booster, Vision)
 app.post('/api/ai/chat', async (req, res) => {
   try {
-    const { query, history = [], cartContext = [] } = req.body;
+    const { query = "", history = [], cartContext = [], userProfile = {}, image = null } = req.body;
 
-    if (!query || typeof query !== 'string') {
+    const queryText = (query && typeof query === 'string') ? query : (image ? "Analyze this product image and find matching items in Infinity Store" : "");
+    if (!queryText && !image) {
       return res.status(400).json({
         success: false,
-        error: "Query parameter is required."
+        error: "Query parameter or image is required."
       });
     }
 
-    console.log(`[Infinity AI Agent] Processing query: "${query}" (Cart items: ${cartContext.length})`);
-    const result = await processAIAgentQuery(query, history, cartContext);
+    console.log(`[Infinity AI Agent] Processing query: "${queryText.slice(0, 80)}" (Image: ${Boolean(image)}, Cart: ${cartContext.length}, Persona: ${userProfile?.learnedInterests?.join(', ') || 'New Shopper'})`);
+    const result = await processAIAgentQuery(queryText, history, cartContext, userProfile, image);
+    if (result) {
+      if (result.reply && !result.text) result.text = result.reply;
+      if (result.text && !result.reply) result.reply = result.text;
+    }
     return res.json(result);
 
   } catch (error) {
@@ -40,14 +110,56 @@ app.post('/api/ai/chat', async (req, res) => {
   }
 });
 
-// 2. 10,000+ Products Catalog API with Advanced Filtering, Sorting & Pagination
-app.get('/api/products', (req, res) => {
-  let { 
-    page = 1, 
-    limit = 24, 
-    category = "all", 
-    subCategory = "all", 
-    search = "", 
+// 1.1 Dedicated Questionnaire & Structured Requirements Submission Endpoint
+app.post('/api/ai/requirements', async (req, res) => {
+  try {
+    const { requirementSessionId, category, requirements = {}, history = [], cartContext = [], userProfile = {} } = req.body;
+
+    console.log(`[Infinity AI Agent] Processing Requirements Submission: category="${category}", priorities=[${(requirements.priorities || []).join(', ')}], budget=${requirements.isBudgetActive ? requirements.budget : 'Flexible'}`);
+    const result = await processAIAgentRequirements({
+      requirementSessionId,
+      category,
+      requirements,
+      history,
+      cartContext,
+      userProfile
+    });
+
+    if (result) {
+      if (result.reply && !result.text) result.text = result.reply;
+      if (result.text && !result.reply) result.reply = result.text;
+    }
+    return res.json(result);
+
+  } catch (error) {
+    console.error("[Infinity AI Requirements Error]:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to process AI requirements",
+      message: error.message
+    });
+  }
+});
+
+// 1.2 Instant Autocomplete & Search Suggestions API (Powered by Trie & BK-Tree in <1ms)
+app.get('/api/search/suggest', (req, res) => {
+  const { q = "", limit = 6 } = req.query;
+  const suggestionsData = searchEngine.getSuggestions(q, parseInt(limit, 10) || 6);
+  res.json({
+    success: true,
+    ...suggestionsData
+  });
+});
+
+// 2. 125,000+ Products Catalog API with DSA-Powered Fast Inverted Index & Min-Heap
+const handleProductSearch = (req, res) => {
+  const {
+    page = 1,
+    limit = 24,
+    category = "all",
+    subCategory = "all",
+    search = "",
+    q = "",
     sortBy = "relevance",
     gender = "all",
     priceRange = "all",
@@ -58,96 +170,29 @@ app.get('/api/products', (req, res) => {
     onlyInfinityMall = "false"
   } = req.query;
 
-  page = Math.max(1, parseInt(page, 10));
-  limit = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const searchQuery = (search || q || "").toString();
 
-  let results = allProducts;
-
-  // Category filter
-  if (category && category !== 'all') {
-    results = results.filter(p => p.category === category || p.mainCategory.toLowerCase() === category.toLowerCase());
-  }
-
-  // SubCategory filter
-  if (subCategory && subCategory !== 'all') {
-    results = results.filter(p => p.subCategory?.toLowerCase() === subCategory.toLowerCase());
-  }
-
-  // Search query filter
-  if (search && search.trim()) {
-    const q = search.toLowerCase().trim();
-    results = results.filter(p => 
-      p.title.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q) ||
-      p.subCategory?.toLowerCase().includes(q) ||
-      p.tags.some(t => t.toLowerCase().includes(q)) ||
-      p.fabric?.toLowerCase().includes(q)
-    );
-  }
-
-  // Gender filter
-  if (gender && gender !== 'all') {
-    results = results.filter(p => p.gender === gender || p.gender === 'All');
-  }
-
-  // Price range filter
-  if (priceRange && priceRange !== 'all') {
-    if (priceRange === '0-199') results = results.filter(p => p.price <= 199);
-    else if (priceRange === '200-499') results = results.filter(p => p.price >= 200 && p.price <= 499);
-    else if (priceRange === '500-999') results = results.filter(p => p.price >= 500 && p.price <= 999);
-    else if (priceRange === '1000+') results = results.filter(p => p.price >= 1000);
-  }
-
-  // Rating filter
-  if (Number(minRating) > 0) {
-    results = results.filter(p => p.rating >= Number(minRating));
-  }
-
-  // Discount filter
-  if (Number(minDiscount) > 0) {
-    results = results.filter(p => p.discount >= Number(minDiscount));
-  }
-
-  // Color filter
-  if (color && color !== 'all') {
-    results = results.filter(p => p.colors?.some(c => c.toLowerCase().includes(color.toLowerCase())));
-  }
-
-  // Size filter
-  if (size && size !== 'all') {
-    results = results.filter(p => p.sizes?.includes(size));
-  }
-
-  // Infinity Mall filter
-  if (onlyInfinityMall === 'true' || onlyInfinityMall === true) {
-    results = results.filter(p => p.infinityMall);
-  }
-
-  // Sorting
-  if (sortBy === 'price-low') {
-    results = [...results].sort((a, b) => a.price - b.price);
-  } else if (sortBy === 'price-high') {
-    results = [...results].sort((a, b) => b.price - a.price);
-  } else if (sortBy === 'rating') {
-    results = [...results].sort((a, b) => b.rating - a.rating);
-  } else if (sortBy === 'discount') {
-    results = [...results].sort((a, b) => b.discount - a.discount);
-  }
-
-  const totalCount = results.length;
-  const totalPages = Math.ceil(totalCount / limit);
-  const startIndex = (page - 1) * limit;
-  const paginatedProducts = results.slice(startIndex, startIndex + limit);
-
-  res.json({
-    success: true,
-    total: totalCount,
-    totalPages,
-    currentPage: page,
-    limit,
-    products: paginatedProducts
+  const results = searchEngine.search({
+    query: searchQuery,
+    category,
+    subCategory,
+    gender,
+    priceRange,
+    minRating: Number(minRating) || 0,
+    minDiscount: Number(minDiscount) || 0,
+    color,
+    size,
+    onlyInfinityMall: onlyInfinityMall === 'true' || onlyInfinityMall === true,
+    sortBy,
+    page: Math.max(1, parseInt(page, 10) || 1),
+    limit: Math.min(100, Math.max(1, parseInt(limit, 10) || 24))
   });
-});
+
+  res.json(results);
+};
+
+app.get('/api/products/search', handleProductSearch);
+app.get('/api/products', handleProductSearch);
 
 // 3. Single Product Lookup API
 app.get('/api/products/:id', (req, res) => {
@@ -211,8 +256,8 @@ app.get('/api/agent/catalog', (req, res) => {
   }
   if (query) {
     const q = query.toLowerCase();
-    results = results.filter(p => 
-      p.title.toLowerCase().includes(q) || 
+    results = results.filter(p =>
+      p.title.toLowerCase().includes(q) ||
       p.tags.some(t => t.toLowerCase().includes(q))
     );
   }
@@ -402,12 +447,14 @@ app.post('/api/payment/verify', (req, res) => {
     const isValid = verifyRazorpayPayment(razorpay_order_id, razorpay_payment_id, razorpay_signature);
 
     if (isValid) {
-      console.log(`[Razorpay] ✅ Payment verified: ${razorpay_payment_id}`);
+      recordFrontendPaymentVerification(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+      console.log(`[Razorpay] ✅ Payment verified & state converged: ${razorpay_payment_id}`);
       return res.json({
         success: true,
         message: 'Payment verified successfully',
         payment_id: razorpay_payment_id,
-        order_id: razorpay_order_id
+        order_id: razorpay_order_id,
+        paymentState: PaymentState.PAYMENT_CONFIRMED
       });
     } else {
       console.warn(`[Razorpay] ❌ Invalid payment signature for: ${razorpay_payment_id}`);
@@ -424,22 +471,47 @@ app.get('/api/payment/key', (req, res) => {
   res.json({ success: true, key_id: getRazorpayKeyId() });
 });
 
-// 8. Health Check
-app.get('/api/health', (req, res) => {
+// 8. Health & Readiness Endpoint
+const handleHealth = (req, res) => {
   res.json({
-    status: "online",
-    service: "Infinity Store AI Backend",
-    aiEngineConfigured: Boolean(
-      (process.env.AI_API_KEY || process.env.GEMINI_API_KEY) &&
-      process.env.AI_API_KEY !== "your_api_key_here" &&
-      process.env.GEMINI_API_KEY !== "your_api_key_here"
-    ),
+    status: "ok",
+    ai: Boolean((process.env.AI_API_KEY || process.env.GEMINI_API_KEY) && process.env.GEMINI_API_KEY !== "your_api_key_here") ? "online" : "mock_mode",
+    redis: redisService.isRedisReady ? "connected" : "in_memory_ttl",
+    searchIndex: "snapshot_active",
     totalCatalogItems: allProducts.length,
+    uptime: Math.round(process.uptime()),
     timestamp: new Date().toISOString()
+  });
+};
+
+app.get('/health', handleHealth);
+app.get('/api/health', handleHealth);
+
+// 404 Catch-All Handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: "NOT_FOUND",
+    message: `Endpoint ${req.method} ${req.originalUrl} not found`,
+    requestId: req.id
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Infinity Store AI Backend running on http://localhost:${PORT}`);
-  console.log(`📦 10,000+ Products Active | Multilingual AI Shopping Agent Online`);
+  console.log(`📦 1,25,000 Products Active | Fast Snapshot Search & Redis Sessions Online`);
 });
+
+// Graceful Shutdown Handler
+const handleShutdown = async (signal) => {
+  console.log(`\n🛑 [Server] Received ${signal}. Closing server gracefully...`);
+  server.close(async () => {
+    await redisService.disconnect();
+    console.log('🛑 [Server] Cleanly closed server and Redis connections.');
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 5000);
+};
+
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));

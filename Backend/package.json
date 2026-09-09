@@ -6,7 +6,12 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node test_production_pillars.js && node test_ecommerce_search_suite.js && node test_ai_scenarios.js",
+    "test:pillars": "node test_production_pillars.js",
+    "test:search": "node test_ecommerce_search_suite.js",
+    "test:ai": "node test_ai_scenarios.js",
+    "test:catalog": "node test_full_catalog_verification.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
@@ -14,6 +19,9 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "ioredis": "^6.0.0",
     "razorpay": "^2.9.8"
   }
 }
