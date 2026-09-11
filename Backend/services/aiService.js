@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { allProducts, searchProductsLocally } from '../data/products/index.js';
+import { allProducts, searchProductsLocally, productsById } from '../data/products/index.js';
 import { ProductSearchEngine } from '../search/SearchEngine.js';
 import { redisService } from './redisService.js';
 import dotenv from 'dotenv';
@@ -93,18 +93,80 @@ const SHOPPING_SYSTEM_PROMPT = `You are **Infinity AI — Senior Personal Commer
 You speak naturally in friendly Hinglish, Hindi, or English (strictly matching the user's language, dialect, and tone).
 
 ## YOUR PERSONALITY & CORE PRINCIPLES:
-1. **Shopping Scope Guard**: You are strictly a commerce assistant. If the user asks for code, homework, medical, legal, political, or general knowledge (e.g. "write binary search in C++"), politely refuse and redirect in the user's language: "I'm focused on helping you shop. Tell me what product you're looking for and I'll help you find the right one."
-2. **Conversational First**: Handle casual greetings ("hello", "how are you", "i want to buy something") naturally without immediately dumping products. Ask what they are shopping for.
-3. **No Direct Product Dump on Broad Words**: If user just mentions a broad category (e.g., "laptop", "phone", "saree"), requirement discovery comes first.
-4. **Honest Catalog Answers**: If the user's budget is impossibly low for a category (e.g. gaming laptop under ₹5,000), do NOT hallucinate fake products or silently alter the budget. Honestly state that no matching products exist in the catalog within that budget, state the real starting price, and ask if they'd like to adjust their budget.
-5. **Language Matching**: The AI conversation text must follow the user's language (English / Hindi / Hinglish). (Note: The store UI remains English).
+1. **Natural Conversation First**:
+   - The AI must NOT behave like a search box all the time.
+   - If the user simply wants to chat ("Hello bhai", "Kya kar raha hai?", "Aaj college bahut tiring tha"):
+     Respond naturally, casually, and warmly in the user's language.
+     Do NOT show products.
+     Do NOT start a questionnaire for normal conversation.
+     Do NOT randomly recommend products.
+     Classify intent as NORMAL_CONVERSATION.
+2. **Shopping Intent Detection**:
+   - When the user expresses a shopping intent ("Mujhe laptop chahiye", "I want a phone", "Gaming ke liye kuch chahiye", "Mujhe shoes lene hain", "Mujhe ek smartwatch buy karni hai"):
+     Do NOT immediately dump random products. First determine whether enough requirement information is available.
+     If requirements are incomplete, initiate a dynamic requirement discovery flow.
+3. **Dynamic Category-Specific Questionnaire**:
+   - Do NOT use hardcoded fixed questions. Dynamically generate the next most useful question for the category.
+   - For a laptop: usage (Gaming, Coding, Office, College, etc.), gaming performance level, RAM, display, budget, brand.
+   - Every question must support:
+     * Clear MCQ options
+     * "No Preference" where appropriate
+     * "Custom" option
+     * Dynamically decide whether single_select or multi_select
+   - Variable question depth: simple products require only 2-3 questions; complex tech may require 4-8 questions.
+   - When user says "product confirm hai" / "bas ab products dikhao" / "requirements complete", finalize requirements and retrieve products.
+4. **Deterministic Search & Candidate-Based Ranking**:
+   - When requirements are complete, products are retrieved from the 125,000+ catalog using the Infinity Search Engine.
+   - Evaluate candidate products against user hard constraints (budget maximum, RAM, brand) and soft preferences.
+   - Rank top 3 to 6 best matching products.
+   - You can ONLY recommend products present in the candidate product list. NEVER invent products, prices, specs, ratings, or IDs.
+   - Provide concise, user-facing explanations with medals (🥇 Best overall match, 🥈 Best performance option, 🥉 Best value option).
+5. **Zero Match Handling**:
+   - If no candidate satisfies hard constraints, honestly state so and offer options (relax budget, adjust specs).
+6. **Follow-Up Refinement & Contextual References**:
+   - Understand "Under 70k", "Only HP", "Second one kaisa hai", "first one ka alternative" using active result context.
+7. **Shopping Scope Guard**:
+   - If user asks for non-shopping tasks (coding, homework, medical, legal), politely redirect to shopping in their language.
+8. **Language Matching**:
+   - Match the user's language (English, Hindi, Hinglish) for conversations while keeping UI labels clean.
 
 ## JSON RESPONSE FORMAT (Always return strict JSON):
 {
-  "showProducts": true | false,
-  "reply": "Your natural markdown response in friendly Hinglish/Hindi/English matching user's vibe",
-  "suggestedFollowUpQueries": ["Option 1", "Option 2", "Option 3", "Option 4"],
-  "upsellPitch": null
+  "message": "Your natural markdown response in user's language without predefined templates",
+  "language": "hinglish" | "english" | "hindi",
+  "intent": "NORMAL_CONVERSATION" | "SHOPPING_INTENT" | "REQUIREMENT_DISCOVERY" | "PRODUCT_RECOMMENDATION" | "FOLLOW_UP_REFINEMENT" | "SCOPE_GUARD" | "CART_ACTION",
+  "state": "GREETING" | "DISCOVERING_INTENT" | "COLLECTING_REQUIREMENTS" | "REQUIREMENTS_COMPLETE" | "CART_ACTION" | "NON_COMMERCE" | "UNCLEAR",
+  "category": "laptops" | "phones" | "headphones" | "fashion" | "footwear" | "fitness" | "appliances" | "watches" | "fragrances" | "bags" | null,
+  "requirementsComplete": boolean,
+  "shouldSearchProducts": boolean,
+  "questionnaire": {
+    "id": "question_identifier_string",
+    "title": "Category-specific question title",
+    "text": "Detailed question text",
+    "type": "single_select" | "multi_select",
+    "options": ["Option 1", "Option 2", "Option 3", "No Preference", "Custom"],
+    "allowCustom": true,
+    "customPlaceholder": "Tell me your requirement (e.g. minimum 24GB RAM for Docker)..."
+  } | null,
+  "requirements": {
+    "priorities": ["priority1", "priority2"],
+    "budget": number | null,
+    "customRequirements": string
+  },
+  "recommendedProductIds": ["prod-id-1", "prod-id-2"],
+  "recommendations": [
+    {
+      "productId": "prod-id-1",
+      "matchRank": 1,
+      "whyMatches": "Concise user-facing explanation why it fits their requirement",
+      "keyHighlight": "Best Overall Match"
+    }
+  ],
+  "agentAction": {
+    "type": "REMOVE_FROM_CART" | "SHOW_CART" | "INITIATE_CHECKOUT",
+    "target": "item keyword or all"
+  } | null,
+  "suggestedFollowUpQueries": ["Option 1", "Option 2", "Option 3", "Option 4"]
 }`;
 
 // Guard against non-commerce queries (coding, homework, entertainment, general knowledge)
@@ -1169,122 +1231,278 @@ export function isHindiOrHinglish(text = "") {
   return hasDevanagari || hasHinglish;
 }
 
-// Generate Interactive Questionnaire with Multiple-Choice Tick Options, Unique Session ID & Custom Input
-export function getInteractiveQuestionnaireForCategory(userQuery = "") {
-  const q = userQuery.toLowerCase();
-  const sessionId = `req-sess-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+// Generate Dynamic Multi-Turn Category-Specific Questionnaire with MCQ, Multi-Select, No Preference & Custom Input
+export function getDynamicQuestionnaireForCategory(categoryOrQuery = "", previousAnswers = {}, accumulatedRequirements = {}) {
+  const q = (categoryOrQuery || "").toLowerCase();
+  const sessionId = accumulatedRequirements?.requirementSessionId || `req-sess-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const answered = { ...previousAnswers, ...(accumulatedRequirements || {}) };
 
+  // 1. LAPTOPS & COMPUTERS
   if (q.includes("laptop") || q.includes("computer") || q.includes("macbook") || q.includes("pc")) {
-    return {
-      requirementSessionId: sessionId,
-      category: "Laptops & Computers",
-      title: "Select Laptop Priorities & Specifications:",
-      options: [
-        { id: "opt-1", label: "Gaming & High-FPS Esports (Dedicated RTX GPU, 144Hz IPS)", value: "Gaming & High-FPS Esports" },
-        { id: "opt-2", label: "Coding, Software Dev & Multitasking (16GB RAM, Fast CPU)", value: "Coding & Software Dev" },
-        { id: "opt-3", label: "Office & College Productivity (Long Battery, Lightweight)", value: "Office & Productivity" },
-        { id: "opt-4", label: "4K Video Editing & Graphic Design (OLED Display, DCI-P3)", value: "Video Editing & Graphic Design" },
-        { id: "opt-5", label: "Budget-Friendly Student Essentials (Under ₹40,000)", value: "Budget Student Laptop" }
-      ],
-      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
-    };
+    if (!answered.usage && !answered.priorities?.length) {
+      return {
+        requirementSessionId: sessionId,
+        category: "laptops",
+        id: "usage",
+        title: "Select Laptop Priorities & Specifications:",
+        text: "What will you mainly use the laptop for?",
+        type: "multi_select",
+        options: [
+          { id: "opt-1", label: "Gaming & High-FPS Esports (Dedicated RTX GPU, 144Hz IPS)", value: "Gaming & High-FPS Esports" },
+          { id: "opt-2", label: "Coding, Software Dev & Multitasking (16GB RAM, Fast CPU)", value: "Coding & Software Dev" },
+          { id: "opt-3", label: "Office & College Productivity (Long Battery, Lightweight)", value: "Office & Productivity" },
+          { id: "opt-4", label: "4K Video Editing & Graphic Design (OLED Display, DCI-P3)", value: "Video Editing & Graphic Design" },
+          { id: "opt-5", label: "Budget-Friendly Student Essentials (Under ₹40,000)", value: "Budget Student Laptop" },
+          { id: "opt-6", label: "No Preference", value: "No Preference" },
+          { id: "opt-7", label: "Custom Requirement", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Tell me your requirement (e.g. minimum 24GB RAM for Docker containers)..."
+      };
+    }
+
+    const isGaming = JSON.stringify(answered).toLowerCase().includes("gaming");
+    if (isGaming && !answered.gaming_tier) {
+      return {
+        requirementSessionId: sessionId,
+        category: "laptops",
+        id: "gaming_tier",
+        title: "Select Gaming Performance Level:",
+        text: "Which gaming performance level do you prefer?",
+        type: "single_select",
+        options: [
+          { id: "opt-g1", label: "Casual Gaming (Esports, Valorant, GTA V, CS2)", value: "Casual Gaming" },
+          { id: "opt-g2", label: "1080p High-FPS (RTX 3050 / RTX 4050 6GB)", value: "1080p Gaming" },
+          { id: "opt-g3", label: "High-End 1440p (RTX 4060 8GB / RTX 4070)", value: "High-End 1440p Gaming" },
+          { id: "opt-g4", label: "AAA / Ultra Heavy Esports (RTX 4080 / 4090)", value: "AAA Ultra Gaming" },
+          { id: "opt-g5", label: "No Preference", value: "No Preference" },
+          { id: "opt-g6", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Specific GPU or TGP requirement..."
+      };
+    }
+
+    if (!answered.ram) {
+      return {
+        requirementSessionId: sessionId,
+        category: "laptops",
+        id: "ram",
+        title: "Select Preferred RAM Capacity:",
+        text: "What RAM capacity do you need?",
+        type: "single_select",
+        options: [
+          { id: "opt-r1", label: "8GB RAM (Basic Everyday Tasks)", value: "8GB" },
+          { id: "opt-r2", label: "16GB Fast DDR5 RAM (Recommended for Gaming & Coding)", value: "16GB" },
+          { id: "opt-r3", label: "32GB High-Speed RAM (Heavy Multitasking & VMs)", value: "32GB" },
+          { id: "opt-r4", label: "64GB+ Extreme RAM (AI/ML & Rendering)", value: "64GB+" },
+          { id: "opt-r5", label: "No Preference", value: "No Preference" },
+          { id: "opt-r6", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Specific RAM requirement (e.g. 24GB DDR5, expandable)..."
+      };
+    }
+
+    if (!answered.budget && !answered.isBudgetActive) {
+      return {
+        requirementSessionId: sessionId,
+        category: "laptops",
+        id: "budget",
+        title: "Select Approximate Budget Limit:",
+        text: "What budget limit do you have in mind?",
+        type: "single_select",
+        options: [
+          { id: "opt-b1", label: "Under ₹45,000 (Student Essentials)", value: "45000" },
+          { id: "opt-b2", label: "₹50,000 - ₹75,000 (Mid-Range Sweet Spot)", value: "75000" },
+          { id: "opt-b3", label: "₹75,000 - ₹1,00,000 (High-Performance Gaming)", value: "100000" },
+          { id: "opt-b4", label: "₹1,00,000+ (Flagship Powerhouse)", value: "150000" },
+          { id: "opt-b5", label: "Flexible Budget", value: "Flexible" },
+          { id: "opt-b6", label: "Custom Budget", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Enter exact budget limit in Rupees (e.g. 80000)..."
+      };
+    }
+
+    if (!answered.brand) {
+      return {
+        requirementSessionId: sessionId,
+        category: "laptops",
+        id: "brand",
+        title: "Select Preferred Brand (Optional):",
+        text: "Do you have any brand preference?",
+        type: "single_select",
+        options: [
+          { id: "opt-br1", label: "Lenovo (LOQ, Legion, ThinkPad)", value: "Lenovo" },
+          { id: "opt-br2", label: "ASUS (TUF Gaming, ROG, ZenBook)", value: "ASUS" },
+          { id: "opt-br3", label: "HP (Victus, Pavilion, Omen)", value: "HP" },
+          { id: "opt-br4", label: "Dell / Alienware", value: "Dell" },
+          { id: "opt-br5", label: "Apple MacBook", value: "Apple" },
+          { id: "opt-br6", label: "No Preference / Any Reliable Brand", value: "No Preference" },
+          { id: "opt-br7", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Other brand or specific model series..."
+      };
+    }
   }
 
-  if (q.includes("headphone") || q.includes("earphone") || q.includes("earbud") || q.includes("tws") || q.includes("audio") || q.includes("soundbar") || q.includes("speaker")) {
-    return {
-      requirementSessionId: sessionId,
-      category: "Audio & Headphones",
-      title: "Select Audio & Noise Cancellation Priorities:",
-      options: [
-        { id: "opt-1", label: "Hybrid 35dB Active Noise Cancellation (ANC Over-Ear)", value: "Hybrid ANC Over-Ear Headphones" },
-        { id: "opt-2", label: "Low Latency 40ms Gaming TWS Earbuds with AI ENC", value: "Low Latency Gaming Earbuds" },
-        { id: "opt-3", label: "60-Hour Long Battery Deep Bass Wireless Neckband", value: "60-Hour Long Battery Neckband" },
-        { id: "opt-4", label: "Compact Bluetooth Party Speaker with RGB Lights", value: "Portable Party Speaker" },
-        { id: "opt-5", label: "Value Audio Pick (Under ₹799)", value: "Value Audio Under ₹799" }
-      ],
-      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
-    };
-  }
-
+  // 2. SMARTPHONES & GADGETS
   if (/\b(?:phone|phones|mobile|mobiles|smartphone|smartphones|5g)\b/i.test(q) || q.includes("smartphone")) {
-    return {
-      requirementSessionId: sessionId,
-      category: "Smartphones & Gadgets",
-      title: "Select Smartphone Priorities & Features:",
-      options: [
-        { id: "opt-1", label: "108MP Pro OIS Camera & Low-Light Photography", value: "108MP Pro Camera with OIS" },
-        { id: "opt-2", label: "120Hz Curved AMOLED Display & 67W Turbo Charge", value: "120Hz AMOLED & Fast Charging" },
-        { id: "opt-3", label: "High-Performance Gaming Chipset & Dual 5G Bands", value: "Gaming 5G Performance" },
-        { id: "opt-4", label: "All-Day Long 5000mAh+ Battery Life", value: "Long Battery Life" },
-        { id: "opt-5", label: "Budget Friendly All-Rounder (Under ₹12,000)", value: "Budget Smartphone" }
-      ],
-      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
-    };
+    if (!answered.usage && !answered.priorities?.length) {
+      return {
+        requirementSessionId: sessionId,
+        category: "phones",
+        id: "usage",
+        title: "Select Smartphone Priorities & Features:",
+        text: "What are your top priorities for the phone?",
+        type: "multi_select",
+        options: [
+          { id: "opt-1", label: "108MP Pro OIS Camera & Low-Light Photography", value: "108MP Pro Camera with OIS" },
+          { id: "opt-2", label: "120Hz Curved AMOLED Display & 67W Turbo Charge", value: "120Hz AMOLED & Fast Charging" },
+          { id: "opt-3", label: "High-Performance Gaming Chipset & Dual 5G Bands", value: "Gaming 5G Performance" },
+          { id: "opt-4", label: "All-Day Long 5000mAh+ Battery Life", value: "Long Battery Life" },
+          { id: "opt-5", label: "Budget Friendly All-Rounder (Under ₹12,000)", value: "Budget Smartphone" },
+          { id: "opt-6", label: "No Preference", value: "No Preference" },
+          { id: "opt-7", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Tell me any specific feature (e.g. clean Android, telephoto zoom)..."
+      };
+    }
   }
 
+  // 3. AUDIO & HEADPHONES
+  if (q.includes("headphone") || q.includes("earphone") || q.includes("earbud") || q.includes("tws") || q.includes("audio") || q.includes("soundbar") || q.includes("speaker")) {
+    if (!answered.usage && !answered.priorities?.length) {
+      return {
+        requirementSessionId: sessionId,
+        category: "headphones",
+        id: "usage",
+        title: "Select Audio & Noise Cancellation Priorities:",
+        text: "What type of audio gear and sound signature do you prefer?",
+        type: "multi_select",
+        options: [
+          { id: "opt-1", label: "Hybrid 35dB Active Noise Cancellation (ANC Over-Ear)", value: "Hybrid ANC Over-Ear Headphones" },
+          { id: "opt-2", label: "Low Latency 40ms Gaming TWS Earbuds with AI ENC", value: "Low Latency Gaming Earbuds" },
+          { id: "opt-3", label: "60-Hour Long Battery Deep Bass Wireless Neckband", value: "60-Hour Long Battery Neckband" },
+          { id: "opt-4", label: "Compact Bluetooth Party Speaker with RGB Lights", value: "Portable Party Speaker" },
+          { id: "opt-5", label: "Value Audio Pick (Under ₹799)", value: "Value Audio Under ₹799" },
+          { id: "opt-6", label: "No Preference", value: "No Preference" },
+          { id: "opt-7", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Specific sound preference (e.g. dual pairing, hi-res LDAC audio)..."
+      };
+    }
+  }
+
+  // 4. FASHION & ETHNIC WEAR
   if (q.includes("saree") || q.includes("kurti") || q.includes("lehenga") || q.includes("ethnic") || q.includes("dress") || q.includes("fashion") || q.includes("shirt") || q.includes("clothing")) {
-    return {
-      requirementSessionId: sessionId,
-      category: "Fashion & Ethnic Wear",
-      title: "Select Style, Occasion & Fabric:",
-      options: [
-        { id: "opt-1", label: "Pure Banarasi Art Silk with Heavy Golden Zari Pallu", value: "Banarasi Silk Saree" },
-        { id: "opt-2", label: "Embroidered Georgette Festive Lehenga Choli Set", value: "Festive Lehenga Choli" },
-        { id: "opt-3", label: "Traditional Lucknowi Chikankari Pure Cotton Kurti", value: "Lucknowi Cotton Kurti" },
-        { id: "opt-4", label: "Heavyweight 220 GSM Oversized Casual Streetwear", value: "Oversized Streetwear Fit" },
-        { id: "opt-5", label: "Budget Steal Deals (Under ₹999)", value: "Festive Deals Under ₹999" }
-      ],
-      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
-    };
+    if (!answered.usage && !answered.priorities?.length) {
+      return {
+        requirementSessionId: sessionId,
+        category: "fashion",
+        id: "usage",
+        title: "Select Style, Occasion & Fabric:",
+        text: "Which style and occasion are you shopping for?",
+        type: "multi_select",
+        options: [
+          { id: "opt-1", label: "Pure Banarasi Art Silk with Heavy Golden Zari Pallu", value: "Banarasi Silk Saree" },
+          { id: "opt-2", label: "Embroidered Georgette Festive Lehenga Choli Set", value: "Festive Lehenga Choli" },
+          { id: "opt-3", label: "Traditional Lucknowi Chikankari Pure Cotton Kurti", value: "Lucknowi Cotton Kurti" },
+          { id: "opt-4", label: "Heavyweight 220 GSM Oversized Casual Streetwear", value: "Oversized Streetwear Fit" },
+          { id: "opt-5", label: "Budget Steal Deals (Under ₹999)", value: "Festive Deals Under ₹999" },
+          { id: "opt-6", label: "No Preference", value: "No Preference" },
+          { id: "opt-7", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Specific color, occasion, or fabric preference..."
+      };
+    }
   }
 
+  // 5. FOOTWEAR & SHOES
   if (q.includes("shoe") || q.includes("sneaker") || q.includes("running") || q.includes("footwear")) {
-    return {
-      requirementSessionId: sessionId,
-      category: "Footwear & Shoes",
-      title: "Select Footwear Type & Comfort:",
-      options: [
-        { id: "opt-1", label: "Air-Cushion Shock-Absorbing Running & Walking Shoes", value: "Air Cushion Running Shoes" },
-        { id: "opt-2", label: "Trendy Chunky Streetwear Sneakers (All-Day Comfort)", value: "Streetwear Lifestyle Sneakers" },
-        { id: "opt-3", label: "Classic Genuine Leather Formal Office Shoes", value: "Formal Leather Shoes" },
-        { id: "opt-4", label: "Super Saver Casual Footwear (Under ₹699)", value: "Value Footwear Under ₹699" }
-      ],
-      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
-    };
+    if (!answered.usage && !answered.priorities?.length) {
+      return {
+        requirementSessionId: sessionId,
+        category: "footwear",
+        id: "usage",
+        title: "Select Footwear Type & Comfort:",
+        text: "What type of footwear are you looking for?",
+        type: "multi_select",
+        options: [
+          { id: "opt-1", label: "Air-Cushion Shock-Absorbing Running & Walking Shoes", value: "Air Cushion Running Shoes" },
+          { id: "opt-2", label: "Trendy Chunky Streetwear Sneakers (All-Day Comfort)", value: "Streetwear Lifestyle Sneakers" },
+          { id: "opt-3", label: "Classic Genuine Leather Formal Office Shoes", value: "Formal Leather Shoes" },
+          { id: "opt-4", label: "Super Saver Casual Footwear (Under ₹699)", value: "Value Footwear Under ₹699" },
+          { id: "opt-5", label: "No Preference", value: "No Preference" },
+          { id: "opt-6", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Specific size, color, or activity..."
+      };
+    }
   }
 
+  // 6. FITNESS & SPORTS
   if (q.includes("gym") || q.includes("fitness") || q.includes("dumbbell") || q.includes("workout") || q.includes("massage gun") || q.includes("yoga")) {
-    return {
-      requirementSessionId: sessionId,
-      category: "Fitness & Sports",
-      title: "Select Fitness & Training Gear:",
-      options: [
-        { id: "opt-1", label: "Solid Cast Iron Adjustable Home Gym Dumbbell Set", value: "Cast Iron Dumbbell Set" },
-        { id: "opt-2", label: "Deep Tissue 3200 RPM Percussion Massage Gun (Muscle Relief)", value: "Deep Tissue Massage Gun" },
-        { id: "opt-3", label: "6mm High-Density Non-Slip Body Alignment Yoga Mat", value: "Non-Slip Yoga Mat" },
-        { id: "opt-4", label: "Complete Home Workout Starter Pack (Under ₹999)", value: "Home Fitness Gear Under ₹999" }
-      ],
-      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
-    };
+    if (!answered.usage && !answered.priorities?.length) {
+      return {
+        requirementSessionId: sessionId,
+        category: "fitness",
+        id: "usage",
+        title: "Select Fitness & Training Gear:",
+        text: "What workout equipment or accessories do you need?",
+        type: "multi_select",
+        options: [
+          { id: "opt-1", label: "Solid Cast Iron Adjustable Home Gym Dumbbell Set", value: "Cast Iron Dumbbell Set" },
+          { id: "opt-2", label: "Deep Tissue 3200 RPM Percussion Massage Gun (Muscle Relief)", value: "Deep Tissue Massage Gun" },
+          { id: "opt-3", label: "6mm High-Density Non-Slip Body Alignment Yoga Mat", value: "Non-Slip Yoga Mat" },
+          { id: "opt-4", label: "Complete Home Workout Starter Pack (Under ₹999)", value: "Home Fitness Gear Under ₹999" },
+          { id: "opt-5", label: "No Preference", value: "No Preference" },
+          { id: "opt-6", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Target weight, exercise type, or material..."
+      };
+    }
   }
 
+  // 7. HOME & KITCHEN APPLIANCES
   if (q.includes("appliance") || q.includes("kitchen") || q.includes("air fryer") || q.includes("blender") || q.includes("mixer") || q.includes("kettle")) {
-    return {
-      requirementSessionId: sessionId,
-      category: "Home & Kitchen Appliances",
-      title: "Select Kitchen Appliance Priorities:",
-      options: [
-        { id: "opt-1", label: "90% Oil-Free Rapid 360° Air Fryer (4L+ Capacity)", value: "Oil-Free Digital Air Fryer" },
-        { id: "opt-2", label: "1000W High-Torque Nutrient Blender & Smoothie Maker", value: "High-Power Nutrient Blender" },
-        { id: "opt-3", label: "Stainless Steel Fast-Boil Electric Kettle (1.8L)", value: "Electric Kettle" },
-        { id: "opt-4", label: "Budget Kitchen Essentials (Under ₹1,499)", value: "Kitchen Essentials Under ₹1499" }
-      ],
-      customPlaceholder: "Enter any specific requirement, feature, brand, specification, or preference..."
-    };
+    if (!answered.usage && !answered.priorities?.length) {
+      return {
+        requirementSessionId: sessionId,
+        category: "appliances",
+        id: "usage",
+        title: "Select Kitchen Appliance Priorities:",
+        text: "What kitchen appliance features are you looking for?",
+        type: "multi_select",
+        options: [
+          { id: "opt-1", label: "90% Oil-Free Rapid 360° Air Fryer (4L+ Capacity)", value: "Oil-Free Digital Air Fryer" },
+          { id: "opt-2", label: "1000W High-Torque Nutrient Blender & Smoothie Maker", value: "High-Power Nutrient Blender" },
+          { id: "opt-3", label: "Stainless Steel Fast-Boil Electric Kettle (1.8L)", value: "Electric Kettle" },
+          { id: "opt-4", label: "Budget Kitchen Essentials (Under ₹1,499)", value: "Kitchen Essentials Under ₹1499" },
+          { id: "opt-5", label: "No Preference", value: "No Preference" },
+          { id: "opt-6", label: "Custom", value: "Custom" }
+        ],
+        allowCustom: true,
+        customPlaceholder: "Capacity, wattage, or cooking presets..."
+      };
+    }
   }
 
   return null;
 }
+
+// Backward compatibility alias for existing test suites
+export function getInteractiveQuestionnaireForCategory(userQuery = "") {
+  return getDynamicQuestionnaireForCategory(userQuery, {}, {});
+}
+
 
 // Helper: Extract active shopping category from current query or recent conversation history
 export function getActiveCategoryFromContext(userQuery = "", conversationHistory = []) {
@@ -1326,6 +1544,16 @@ export function getActiveCategoryFromContext(userQuery = "", conversationHistory
 // Helper: Check if user has already specified requirements or is responding to the questionnaire
 export function hasUserSpecifiedRequirements(userQuery = "", conversationHistory = []) {
   const q = userQuery.toLowerCase().trim();
+
+  // 0. User confirmation signal: "product confirm hai", "haan product confirm hai", "okay find it", "bas ab products dikhao"
+  if (/\b(?:product\s*confirm\s*hai|confirm\s*hai|confirm\s*karo|haan\s*product\s*confirm\s*hai|haan\s*bhai\s*dikha|bas\s*ab\s*products\s*dikhao|requirements\s*complete|yes\s*this\s*is\s*what\s*i\s*want|okay\s*find\s*it|find\s*it\s*now|show\s*matches|show\s*products)\b/i.test(q)) {
+    return true;
+  }
+
+  // 0B. Follow-up refinements: "show cheaper ones", "under 70k", "only hp", "better battery", "second one"
+  if (/\b(?:show\s*cheaper|cheaper\s*ones|under\s*\d+|only\s+[a-z]+|better\s*battery|better\s*performance|first\s*one|second\s*one|third\s*one|fourth\s*one|this\s*one|that\s*one)\b/i.test(q)) {
+    return true;
+  }
 
   // If user is switching or introducing a broad category without concrete specs (e.g. "actually I want a smartphone", "laptop dikhao", "show me phones")
   const isBroadCategoryRequest = (
@@ -1450,10 +1678,27 @@ export function analyzeConversationState(userQuery = "", conversationHistory = [
     };
   }
 
-  // 4. Greetings & Casual Banter ("Hello", "Hello bhai", "Kesa hai", "Kaise ho", "Kya haal", "Good morning", "How are you", "Whats up", "Thanks", "Okay", "Cool", "Nice")
+  // 3B. Product Requirement Confirmation / Finalize signal ("product confirm hai", "haan bhai dikha", "yes this is what I want", "okay find it", "bas ab products dikhao")
+  const isRequirementConfirmation = (
+    /\b(?:product\s*confirm\s*hai|confirm\s*hai|confirm\s*karo|haan\s*product\s*confirm\s*hai|haan\s*bhai\s*dikha|bas\s*ab\s*products\s*dikhao|requirements\s*complete|yes\s*this\s*is\s*what\s*i\s*want|okay\s*find\s*it|find\s*it\s*now|show\s*matches|show\s*products)\b/i.test(q)
+  );
+  if (isRequirementConfirmation) {
+    const contextualCategory = getActiveCategoryFromContext(userQuery, conversationHistory) || "laptops";
+    return {
+      state: ConversationState.REQUIREMENTS_COMPLETE,
+      intent: 'product_recommendation',
+      shoppingIntent: true,
+      category: contextualCategory,
+      requirementsComplete: true,
+      shouldSearchProducts: true
+    };
+  }
+
+  // 4. Greetings & Casual Banter ("Hello", "Hello bhai", "Kesa hai", "Kaise ho", "Kya haal", "Kya scene hai", "Kya kar raha hai", "Aaj college bahut tiring tha", "Good morning", "How are you", "Whats up", "Thanks", "Okay", "Cool", "Nice")
   const isGreetingOrBanter = (
     /\b(?:hello|hi|hey|hii|heyy|namaste|pranam|good\s*(?:morning|afternoon|evening|night)|yo|hola|assalam|salaam)\b/i.test(q) ||
-    /\b(?:how\s*are\s*you|how\s*r\s*u|wassup|what'?s\s*up|kaise\s*ho|kaisa\s*hai|kesa\s*hai|kya\s*haal|kya\s*chal\s*raha)\b/i.test(q) ||
+    /\b(?:how\s*are\s*you|how\s*r\s*u|wassup|what'?s\s*up|kaise\s*ho|kaisa\s*hai|kesa\s*hai|kya\s*haal|kya\s*chal\s*raha|kya\s*scene\s*hai|kya\s*kar\s*raha\s*hai|kya\s*kr\s*rha\s*h)\b/i.test(q) ||
+    /\b(?:college|office|school|tiring|thak\s*gaya|bore\s*ho\s*raha|mood|kuch\s*nahi|aur\s*batao)\b/i.test(q) ||
     /^(?:thanks|thank\s*you|shukriya|dhanyawad|ok|okay|cool|nice|great|thik\s*hai|theek\s*hai|sahi\s*hai|achha|acha)[!.]*$/i.test(q)
   );
 
@@ -1488,6 +1733,7 @@ export function analyzeConversationState(userQuery = "", conversationHistory = [
     };
   }
 
+  // 6. Policies
   const isPolicy = /\b(?:delivery|shipping|return|returns|refund|refunds|safe\s*hai|secure|razorpay|cod|guarantee)\b/i.test(q);
   if (isPolicy && !hasProductKeywords) {
     return {
@@ -1500,7 +1746,7 @@ export function analyzeConversationState(userQuery = "", conversationHistory = [
     };
   }
 
-  // 6. Gibberish / Random letters check ("asdfgh", "ulla", "xyz123")
+  // 7. Gibberish / Random letters check ("asdfgh", "ulla", "xyz123")
   const isGibberish = !hasProductKeywords && (
     /^(?:asdf|asdfgh|qwerty|zxcv|ulla|xyz|abcd|bla|blabla|\d+|[b-df-hj-np-tv-z]{5,})$/i.test(q) ||
     (q.length < 15 && !/[aeiouy]/i.test(q) && !/hi|ok/i.test(q))
@@ -1661,8 +1907,13 @@ export function checkImpossibleBudget(userQuery, numericBudget) {
 
 // Dedicated Questionnaire & Structured Requirements Submission Processor
 export async function processAIAgentRequirements({
+  sessionId,
   requirementSessionId,
   category = "laptops",
+  questionId = null,
+  answer = null,
+  customInput = null,
+  isStep = false,
   requirements = {},
   history = [],
   cartContext = [],
@@ -1681,10 +1932,45 @@ export async function processAIAgentRequirements({
   else if (catKey.includes("fragrance") || catKey.includes("perfume")) normalizedCategory = "fragrances";
   else if (catKey.includes("bag") || catKey.includes("luggage")) normalizedCategory = "bags";
 
-  const priorities = Array.isArray(requirements.priorities) ? requirements.priorities : [];
-  const customReq = requirements.customRequirements || requirements.customInput || "";
-  const budget = requirements.isBudgetActive && requirements.budget ? Number(requirements.budget) : null;
-  const isBudgetActive = Boolean(requirements.isBudgetActive && budget);
+  // Merge structured answer if provided
+  const accumulated = { ...requirements };
+  if (questionId && answer) {
+    accumulated[questionId] = answer;
+    if (questionId === 'usage' && Array.isArray(answer)) {
+      accumulated.priorities = Array.from(new Set([...(accumulated.priorities || []), ...answer]));
+    } else if (questionId === 'budget' && typeof answer === 'string' && /^\d+$/.test(answer)) {
+      accumulated.budget = Number(answer);
+      accumulated.isBudgetActive = true;
+    }
+  }
+  if (customInput && typeof customInput === 'string' && customInput.trim()) {
+    accumulated.customRequirements = [accumulated.customRequirements, customInput.trim()].filter(Boolean).join("; ");
+  }
+
+  // If this was an intermediate questionnaire step, check if next question is needed
+  if (isStep && questionId) {
+    const nextQ = getDynamicQuestionnaireForCategory(normalizedCategory, accumulated, accumulated);
+    if (nextQ && nextQ.id !== questionId) {
+      const isHindi = isHindiOrHinglish((history[history.length - 1]?.text || category) + " " + (answer || ""));
+      const reply = isHindi
+        ? `Samajh gaya bhai! 👍 Ab ye batao: ${nextQ.text}`
+        : `Got your preference! 👍 Next up: ${nextQ.text}`;
+      return {
+        success: true,
+        state: ConversationState.COLLECTING_REQUIREMENTS,
+        reply,
+        text: reply,
+        questionnaire: nextQ,
+        requirements: accumulated,
+        products: []
+      };
+    }
+  }
+
+  const priorities = Array.isArray(accumulated.priorities) ? accumulated.priorities : [];
+  const customReq = accumulated.customRequirements || accumulated.customInput || "";
+  const budget = accumulated.isBudgetActive && accumulated.budget ? Number(accumulated.budget) : null;
+  const isBudgetActive = Boolean(accumulated.isBudgetActive && budget);
 
   const queryComposite = [
     normalizedCategory,
@@ -1723,7 +2009,8 @@ export async function processAIAgentRequirements({
     query: queryComposite
   });
 
-  const topProducts = matched.slice(0, 5);
+  const candidatePool = matched.slice(0, 30);
+  const topProducts = candidatePool.slice(0, 5);
 
   const contextPackage = buildContextPackage(
     queryComposite,
@@ -1735,13 +2022,31 @@ export async function processAIAgentRequirements({
   );
 
   if (genAI) {
-    const geminiResult = await callGeminiWithContext(contextPackage, topProducts);
+    const geminiResult = await callGeminiWithContext(contextPackage, candidatePool.slice(0, 15));
     if (geminiResult && geminiResult.message) {
-      const enrichedProducts = topProducts.length > 0 ? enrichProductsWithRequirementMatch(topProducts, detectedReqs, queryComposite) : [];
-      const relatedProducts = topProducts.length > 0 ? getRelatedProductsForCategory(queryComposite, enrichedProducts) : [];
+      let finalProducts = [];
+      if (Array.isArray(geminiResult.recommendations) && geminiResult.recommendations.length > 0) {
+        for (const rec of geminiResult.recommendations) {
+          const p = productsById[rec.productId];
+          if (p && !finalProducts.some(existing => existing.id === p.id)) {
+            if (isBudgetActive && budget && p.price > budget) continue;
+            finalProducts.push({
+              ...p,
+              matchRank: rec.matchRank || (finalProducts.length + 1),
+              whyItMatches: rec.whyMatches || `Matches your requirement for ${detectedReqs.intent || 'performance'}.`,
+              keyHighlight: rec.keyHighlight || (finalProducts.length === 0 ? "Best Overall Match 🥇" : "Top Recommendation")
+            });
+          }
+        }
+      }
+      if (finalProducts.length === 0) {
+        finalProducts = topProducts.length > 0 ? enrichProductsWithRequirementMatch(topProducts, detectedReqs, queryComposite) : [];
+      }
+
+      const relatedProducts = finalProducts.length > 0 ? getRelatedProductsForCategory(queryComposite, finalProducts) : [];
 
       let upsell = null;
-      if (topProducts.length > 0) {
+      if (finalProducts.length > 0) {
         if (normalizedCategory === "laptops") {
           upsell = {
             title: "Pro Esports RGB Optical Gaming Mouse (7200 DPI)",
@@ -1762,9 +2067,10 @@ export async function processAIAgentRequirements({
         state: ConversationState.REQUIREMENTS_COMPLETE,
         reply: geminiResult.message,
         text: geminiResult.message,
-        products: enrichedProducts,
+        products: finalProducts,
         relatedProducts: relatedProducts,
         upsellPitch: upsell,
+        requirements: accumulated,
         suggestedFollowUpQueries: geminiResult.suggestedFollowUpQueries || ["Show My Cart 🛒", "Proceed to Checkout ⚡", "Top Deals Today 🔥"]
       };
     }
@@ -1852,7 +2158,7 @@ export async function callGeminiWithContext(contextPackage, candidateProducts = 
   if (!genAI) return null;
 
   const productContext = candidateProducts.length > 0
-    ? candidateProducts.map((p, i) => `[Product #${i + 1}] "${p.title}" | Price: Rs.${p.price} (MRP Rs.${p.originalPrice || p.price}) | Rating: ${p.rating}★ | Specs: ${p.fabric || p.description || ''} | SubCat: ${p.subCategory || ''}`).join('\n')
+    ? candidateProducts.map((p, i) => `[Candidate #${i + 1}] ID: "${p.id}" | "${p.title}" | Price: Rs.${p.price} (MRP Rs.${p.originalPrice || p.price}) | Rating: ${p.rating}★ | Specs: ${p.fabric || p.description || ''} | SubCat: ${p.subCategory || ''}`).join('\n')
     : "NO PRODUCTS RETRIEVED (Conversational / Intent Discovery / Requirement Phase).";
 
   const systemInstruction = `You are Infinity Store's AI shopping assistant.
@@ -1864,11 +2170,16 @@ CORE INSTRUCTIONS:
 1. Generate EVERY conversational response dynamically. Never use predefined or hardcoded response templates.
 2. The store UI is English, but your conversational language MUST naturally match the user's language (English, Hindi, or natural Hinglish).
 3. If the user attaches/uploads an image of a product, visually analyze the product (category, type, style, color, pattern, material, brand) and recommend closely matching or exact products from Infinity Store catalog.
-4. If the user is simply greeting or casual chatting (e.g. "Hello", "How are you", "Hello bhai kesa hai kya kr skta hai tu"), converse warmly and explain your capabilities as Infinity AI. DO NOT dump or show product cards on greetings.
+4. If the user is simply greeting or casual chatting (e.g. "Hello", "How are you", "Hello bhai", "kya kar raha hai", "aaj college bahut tiring tha"), converse warmly and naturally as a friendly shopping companion. DO NOT dump or show product cards on casual conversations.
 5. If the user expresses a general desire to buy something without naming a category ("I want to buy something", "kuch kharidna hai"), ask what kind of product they are looking for.
 6. If the user asks a non-shopping question (e.g. coding, C++ binary search, homework, medical, legal), politely refuse and redirect to shopping in their language.
-7. When the user identifies a broad category (e.g. "I need a laptop", "show me phones", "I want headphones", "saree dikhao") for the first time without specific features, provide a dynamic multi-select specification questionnaire tailored specifically to that product category. Do not ask questionnaires multiple times.
-8. When user gives complete requirements or submits questionnaire, explain concisely WHY each product matches the user's specific requirements using ONLY real structured facts from the candidate products. Never invent ratings, review counts, discounts, or delivery guarantees.
+7. When the user identifies a broad category (e.g. "I need a laptop", "show me phones", "I want headphones", "saree dikhao") for the first time without specific features, provide a dynamic specification questionnaire tailored specifically to that product category.
+8. When recommending products:
+   - CRITICAL GROUNDING RULE: You can ONLY recommend products present in the CANDIDATE PRODUCTS FROM INVENTORY above.
+   - Return their exact IDs in recommendedProductIds and recommendations.
+   - NEVER invent products, prices, specs, ratings, or IDs.
+   - Rank top 3 to 6 candidates based on user's hard constraints (budget, specs) and soft preferences.
+   - Provide clear, user-facing reasons why each product fits (e.g. fits budget, RAM, thermals).
 9. If the user sets an impossible budget for a category (e.g. gaming laptop under ₹5,000), explain that no options exist in the catalog within that budget, mention the minimum starting price (e.g. ₹37,490 for gaming laptops), and ask if they'd like to adjust their budget.
 10. For cart actions (remove item, show cart, checkout), generate natural confirmation messages and set agentAction.
 
@@ -1883,7 +2194,10 @@ Always return strict JSON format:
   "shouldSearchProducts": boolean,
   "shouldAskQuestion": boolean,
   "questionnaire": {
+    "id": "question_id",
     "title": "Category-specific title",
+    "text": "Question text",
+    "type": "single_select" | "multi_select",
     "options": [
       { "id": "opt-1", "label": "Option label with specs", "value": "Option value" }
     ],
@@ -1893,6 +2207,15 @@ Always return strict JSON format:
     "priorities": ["priority1", "priority2"],
     "budget": number | null
   },
+  "recommendedProductIds": ["prod-id-1", "prod-id-2"],
+  "recommendations": [
+    {
+      "productId": "prod-id-1",
+      "matchRank": 1,
+      "whyMatches": "Concise user-facing explanation why it fits their requirement",
+      "keyHighlight": "Best Overall Match"
+    }
+  ],
   "agentAction": {
     "type": "REMOVE_FROM_CART" | "SHOW_CART" | "INITIATE_CHECKOUT",
     "target": "item keyword or all"
@@ -2023,8 +2346,27 @@ export async function processAIAgentQuery(userQuery, conversationHistory = [], c
         questionnaire = getInteractiveQuestionnaireForCategory(userQuery);
       }
 
-      const enrichedProducts = shouldShow ? enrichProductsWithRequirementMatch(candidateProducts, detectedReqs, userQuery) : [];
-      const relatedProducts = shouldShow ? getRelatedProductsForCategory(userQuery, enrichedProducts) : [];
+      let finalProducts = [];
+      if (shouldShow) {
+        if (Array.isArray(geminiResult.recommendations) && geminiResult.recommendations.length > 0) {
+          for (const rec of geminiResult.recommendations) {
+            const p = productsById[rec.productId];
+            if (p && !finalProducts.some(existing => existing.id === p.id)) {
+              if (detectedReqs.isBudgetActive && detectedReqs.numericBudget && p.price > detectedReqs.numericBudget) continue;
+              finalProducts.push({
+                ...p,
+                matchRank: rec.matchRank || (finalProducts.length + 1),
+                whyItMatches: rec.whyMatches || `Matches your requirement for ${detectedReqs.intent || 'performance'}.`,
+                keyHighlight: rec.keyHighlight || (finalProducts.length === 0 ? "Best Overall Match 🥇" : "Top Recommendation")
+              });
+            }
+          }
+        }
+        if (finalProducts.length === 0) {
+          finalProducts = enrichProductsWithRequirementMatch(candidateProducts, detectedReqs, userQuery);
+        }
+      }
+      const relatedProducts = finalProducts.length > 0 ? getRelatedProductsForCategory(userQuery, finalProducts) : [];
 
       let inChatCheckout = null;
       if (geminiResult.agentAction?.type === "SHOW_CART" || geminiResult.agentAction?.type === "INITIATE_CHECKOUT") {
@@ -2042,7 +2384,7 @@ export async function processAIAgentQuery(userQuery, conversationHistory = [], c
         text: geminiResult.message,
         agentAction: geminiResult.agentAction || null,
         questionnaire: questionnaire || null,
-        products: enrichedProducts,
+        products: finalProducts,
         relatedProducts: relatedProducts,
         inChatCheckout: inChatCheckout,
         suggestedFollowUpQueries: geminiResult.suggestedFollowUpQueries || (questionnaire ? questionnaire.options.slice(0, 4).map(o => o.label || o.value) : ["Show My Cart 🛒", "Top Deals Today 🔥"])
@@ -2079,10 +2421,24 @@ function generateDynamicFallback(userQuery, stateAnalysis, detectedReqs, candida
       ? "Main **Infinity AI** hoon — aapka personal shopping assistant! 🤖✨ Main aapko 1,00,250+ catalog products mein se perfect items dhoondhne aur Razorpay se safe payment karne mein help karta hoon.\n\nAap batayein, aaj kya dekhna chahenge?"
       : "Hey! I'm your **Infinity AI** shopping assistant! 🤖✨ Tell me what product or category you're looking for, and I'll help you discover the perfect match from our 1,00,250+ product catalog.";
   } else if (stateAnalysis.state === ConversationState.GREETING) {
-    const isHowAreYou = /how\s*are\s*you|kaise\s*ho|kya\s*haal|kesa\s*hai|kaisa\s*hai/i.test(q);
-    reply = isHowAreYou
-      ? (isHindi ? "Main badhiya hoon! Main aapki shopping mein kya madad kar sakta hoon? Bataiye aaj kya dekhna chahenge?" : "I'm doing great! What can I help you shop for today?")
-      : (isHindi ? "Hey! Aap aaj kya kharidna chahte hain? (Jaise Laptops, Smartphones, Festive Sarees, Headphones ya Shoes)" : "Hey! What are you looking to buy today?");
+    if (q.includes("college") || q.includes("tiring") || q.includes("thak")) {
+      reply = isHindi
+        ? "Arre bhai, college ke din waise hi tiring hote hain! 😅 Thoda relax karo aur fresh ho jao. Agar mood lift karne ke liye koi cool gadgets, music gear ya sneakers dekhne hon toh batao!"
+        : "Sounds like a really tiring day! Take some rest and unwind. If you want to browse some cool tech, headphones, or comfy clothes to refresh your mood, I'm right here! 😊";
+    } else if (q.includes("kya kar raha") || q.includes("kya kr rha")) {
+      reply = isHindi
+        ? "Bas ready hoon 😄 Batao kya dekhna hai ya kis cheez mein help chahiye?"
+        : "Just here and ready to help! 😄 What are you looking to explore today?";
+    } else if (q.includes("hello bhai") || q.includes("hey bhai")) {
+      reply = isHindi
+        ? "Hey bhai! 👋 Kya scene hai? Main yahin hoon."
+        : "Hey brother! 👋 What's up? I'm right here.";
+    } else {
+      const isHowAreYou = /how\s*are\s*you|kaise\s*ho|kya\s*haal|kesa\s*hai|kaisa\s*hai/i.test(q);
+      reply = isHowAreYou
+        ? (isHindi ? "Main badhiya hoon! Main aapki shopping mein kya madad kar sakta hoon? Bataiye aaj kya dekhna chahenge?" : "I'm doing great! What can I help you shop for today?")
+        : (isHindi ? "Hey! Aap aaj kya kharidna chahte hain? (Jaise Laptops, Smartphones, Festive Sarees, Headphones ya Shoes)" : "Hey! What are you looking to buy today?");
+    }
   } else if (stateAnalysis.state === ConversationState.DISCOVERING_INTENT) {
     reply = isHindi
       ? "Haan, bilkul! Aap kya kharidna chahte hain? (Jaise: Laptops, Smartphones, Festive Wear, Headphones, ya Fitness Gear?)"

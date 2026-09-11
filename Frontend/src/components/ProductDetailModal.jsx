@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useShop } from '../context/ShopContext';
 import { 
   X, 
@@ -14,7 +14,9 @@ import {
   CheckCircle2, 
   Store,
   ChevronRight,
-  Share2
+  Share2,
+  ZoomIn,
+  Maximize2
 } from 'lucide-react';
 import { SizeChartModal } from './SizeChartModal';
 import { SafeImage } from './SafeImage';
@@ -37,11 +39,101 @@ export const ProductDetailModal = () => {
   const [pincodeChecked, setPincodeChecked] = useState(false);
   const [isSizeChartOpen, setIsSizeChartOpen] = useState(false);
 
+  // Interactive Zoom Lens States
+  const [zoomState, setZoomState] = useState({
+    isActive: false,
+    xPercent: 50,
+    yPercent: 50,
+    lensX: 0,
+    lensY: 0,
+    lensWidth: 120,
+    lensHeight: 140
+  });
+  const [zoomLevel, setZoomLevel] = useState(2.8);
+  const [isFullScreenZoom, setIsFullScreenZoom] = useState(false);
+  const mainImageRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (isFullScreenZoom) {
+          setIsFullScreenZoom(false);
+        } else if (activeModal === 'productDetail') {
+          setActiveModal(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullScreenZoom, activeModal, setActiveModal]);
+
   if (activeModal !== 'productDetail' || !selectedProduct) return null;
 
   const isWishlisted = isInWishlist(selectedProduct.id);
   const currentSize = selectedSize || (selectedProduct.sizes && selectedProduct.sizes[0]) || "Free Size";
   const currentColor = selectedColor || (selectedProduct.colors && selectedProduct.colors[0]) || "Standard";
+
+  const currentRawImg = (selectedProduct.images && selectedProduct.images[activeImageIndex]) || (selectedProduct.images && selectedProduct.images[0]) || "";
+  const highResImg = currentRawImg.includes('unsplash.com')
+    ? currentRawImg.replace(/w=\d+/, 'w=1800').replace(/q=\d+/, 'q=95')
+    : currentRawImg;
+
+  const handleMouseMove = (e) => {
+    if (!mainImageRef.current) return;
+    const rect = mainImageRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+
+    const xPercent = (x / rect.width) * 100;
+    const yPercent = (y / rect.height) * 100;
+
+    const lensWidth = Math.round(rect.width * 0.38);
+    const lensHeight = Math.round(rect.height * 0.38);
+
+    const lensX = Math.max(0, Math.min(rect.width - lensWidth, x - lensWidth / 2));
+    const lensY = Math.max(0, Math.min(rect.height - lensHeight, y - lensHeight / 2));
+
+    setZoomState({
+      isActive: true,
+      xPercent,
+      yPercent,
+      lensX,
+      lensY,
+      lensWidth,
+      lensHeight
+    });
+  };
+
+  const handleMouseLeave = () => {
+    setZoomState((prev) => ({ ...prev, isActive: false }));
+  };
+
+  const handleTouchMove = (e) => {
+    if (!mainImageRef.current || !e.touches[0]) return;
+    const rect = mainImageRef.current.getBoundingClientRect();
+    const touch = e.touches[0];
+    const x = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, touch.clientY - rect.top));
+
+    const xPercent = (x / rect.width) * 100;
+    const yPercent = (y / rect.height) * 100;
+
+    const lensWidth = Math.round(rect.width * 0.42);
+    const lensHeight = Math.round(rect.height * 0.42);
+
+    const lensX = Math.max(0, Math.min(rect.width - lensWidth, x - lensWidth / 2));
+    const lensY = Math.max(0, Math.min(rect.height - lensHeight, y - lensHeight / 2));
+
+    setZoomState({
+      isActive: true,
+      xPercent,
+      yPercent,
+      lensX,
+      lensY,
+      lensWidth,
+      lensHeight
+    });
+  };
 
   const handleCheckPincode = (e) => {
     e.preventDefault();
@@ -85,28 +177,98 @@ export const ProductDetailModal = () => {
           
           {/* Left Column: Image Gallery */}
           <div className="md:col-span-5 space-y-4">
-            {/* Main Image */}
-            <div className="relative aspect-[4/5] bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 group shadow-sm">
+            
+            {/* Main Image with Zoom Lens */}
+            <div 
+              ref={mainImageRef}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleMouseLeave}
+              className="relative aspect-[4/5] bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 group shadow-sm cursor-crosshair select-none"
+            >
               <SafeImage
-                src={selectedProduct.images[activeImageIndex] || selectedProduct.images[0]}
+                src={highResImg}
                 alt={selectedProduct.title}
-                className="w-full h-full object-cover object-top"
+                className="w-full h-full object-cover object-top transition-transform duration-200"
               />
+
+              {/* Interactive Zoom Lens Box (Amazon / Myntra Style) */}
+              {zoomState.isActive && (
+                <div
+                  className="absolute pointer-events-none border-2 border-indigo-600 bg-indigo-500/20 backdrop-blur-[0.5px] rounded-xl shadow-lg z-20 transition-transform duration-75"
+                  style={{
+                    width: `${zoomState.lensWidth}px`,
+                    height: `${zoomState.lensHeight}px`,
+                    left: `${zoomState.lensX}px`,
+                    top: `${zoomState.lensY}px`,
+                  }}
+                >
+                  {/* Camera view-finder style corner marks */}
+                  <div className="absolute top-1 left-1 w-2.5 h-2.5 border-t-2 border-l-2 border-white"></div>
+                  <div className="absolute top-1 right-1 w-2.5 h-2.5 border-t-2 border-r-2 border-white"></div>
+                  <div className="absolute bottom-1 left-1 w-2.5 h-2.5 border-b-2 border-l-2 border-white"></div>
+                  <div className="absolute bottom-1 right-1 w-2.5 h-2.5 border-b-2 border-r-2 border-white"></div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[10px] font-black text-white bg-indigo-950/80 px-1.5 py-0.5 rounded shadow-sm">
+                      {zoomLevel}x
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Wishlist Button */}
               <button
                 onClick={() => toggleWishlist(selectedProduct.id)}
-                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 backdrop-blur-md shadow-md flex items-center justify-center text-slate-500 hover:text-rose-600 transition-all active:scale-95"
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 backdrop-blur-md shadow-md flex items-center justify-center text-slate-500 hover:text-rose-600 transition-all active:scale-95 z-20"
+                aria-label="Toggle Wishlist"
               >
                 <Heart className={`w-5 h-5 ${isWishlisted ? 'text-rose-500 fill-rose-500' : ''}`} />
               </button>
 
+              {/* Fullscreen Expand Button */}
+              <button
+                type="button"
+                onClick={() => setIsFullScreenZoom(true)}
+                className="absolute top-3 right-14 w-9 h-9 rounded-full bg-white/90 backdrop-blur-md shadow-md flex items-center justify-center text-slate-600 hover:text-indigo-600 transition-all active:scale-95 z-20"
+                title="Fullscreen HD View"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+
               {/* Infinity Mall Tag */}
               {selectedProduct.infinityMall && (
-                <div className="absolute top-3 left-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-extrabold px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+                <div className="absolute top-3 left-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-extrabold px-3 py-1 rounded-full shadow-md flex items-center gap-1 z-20">
                   <Sparkles className="w-3 h-3 text-amber-300" /> Mall
                 </div>
               )}
+
+              {/* Bottom Lens Status Pill & Zoom Controls */}
+              <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
+                <div className="bg-black/75 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-md flex items-center gap-1.5">
+                  <ZoomIn className="w-3.5 h-3.5 text-cyan-300" />
+                  <span>{zoomState.isActive ? `Zooming: ${zoomLevel}x HD` : 'Hover to Zoom'}</span>
+                </div>
+
+                {/* Zoom Level Switcher */}
+                <div className="pointer-events-auto flex items-center gap-1 bg-white/90 backdrop-blur-md p-1 rounded-xl shadow-md border border-slate-200 text-[10px] font-bold">
+                  {[2, 2.8, 3.8].map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setZoomLevel(lvl);
+                      }}
+                      className={`px-1.5 py-0.5 rounded-lg transition-colors cursor-pointer ${
+                        zoomLevel === lvl ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {lvl}x
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Thumbnail Strip */}
@@ -141,8 +303,50 @@ export const ProductDetailModal = () => {
             </div>
           </div>
 
-          {/* Right Column: Product Info & Actions */}
-          <div className="md:col-span-7 space-y-5">
+          {/* Right Column: Product Info & Actions with HD Zoom Overlay */}
+          <div className="md:col-span-7 space-y-5 relative min-h-[480px]">
+            
+            {/* Interactive High-Definition Zoom Window (Amazon / Myntra Style) */}
+            {zoomState.isActive && (
+              <div className="hidden md:flex absolute inset-0 z-30 bg-white rounded-3xl shadow-2xl border-2 border-indigo-400 overflow-hidden flex-col animate-in fade-in zoom-in-95 duration-150 pointer-events-none">
+                {/* Zoom Header Bar */}
+                <div className="bg-slate-900/95 backdrop-blur-md text-white px-4 py-2.5 flex items-center justify-between text-xs font-semibold shadow-sm flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span className="font-bold text-white tracking-wide">🔍 High-Definition Texture & Fabric Zoom ({zoomLevel}x)</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                    <span>Move mouse over image to inspect stitch & details</span>
+                    <span className="bg-indigo-600 text-white font-bold px-2 py-0.5 rounded-md">Ultra HD</span>
+                  </div>
+                </div>
+
+                {/* Magnified Canvas */}
+                <div
+                  className="flex-1 w-full h-full bg-slate-50 relative"
+                  style={{
+                    backgroundImage: `url('${highResImg}')`,
+                    backgroundPosition: `${zoomState.xPercent}% ${zoomState.yPercent}%`,
+                    backgroundSize: `${zoomLevel * 100}%`,
+                    backgroundRepeat: 'no-repeat',
+                    imageRendering: 'auto'
+                  }}
+                >
+                  {/* Target Crosshair */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                    <div className="w-16 h-16 border border-dashed border-indigo-600 rounded-full flex items-center justify-center">
+                      <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full"></div>
+                    </div>
+                  </div>
+
+                  {/* Floating Coordinates & Status */}
+                  <div className="absolute bottom-3 right-3 bg-black/75 backdrop-blur-md text-white text-[11px] font-mono px-3 py-1 rounded-xl shadow-lg flex items-center gap-2">
+                    <span className="text-emerald-400 font-bold">● 1800px HD Ultra Detail</span>
+                    <span>Focus: {Math.round(zoomState.xPercent)}%, {Math.round(zoomState.yPercent)}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
             
             {/* Title & Category */}
             <div>
@@ -346,6 +550,39 @@ export const ProductDetailModal = () => {
         </div>
 
       </div>
+
+      {/* Fullscreen HD Lightbox View */}
+      {isFullScreenZoom && (
+        <div 
+          onClick={() => setIsFullScreenZoom(false)}
+          className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="relative max-w-5xl max-h-[88vh] overflow-hidden rounded-3xl shadow-2xl bg-slate-900 border border-white/20 p-2"
+          >
+            <img
+              src={highResImg}
+              alt={selectedProduct.title}
+              className="w-full h-full object-contain max-h-[82vh] rounded-2xl select-none"
+            />
+            <button
+              type="button"
+              onClick={() => setIsFullScreenZoom(false)}
+              className="absolute top-4 right-4 bg-black/70 hover:bg-black text-white p-2.5 rounded-full backdrop-blur-md transition-all active:scale-95 shadow-lg border border-white/20 cursor-pointer"
+              aria-label="Close fullscreen"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-xl border border-white/10">
+              {selectedProduct.title} • Ultra-HD Resolution
+            </div>
+          </div>
+          <div className="text-white/70 text-xs mt-3 flex items-center gap-2">
+            <span>Press Escape or click anywhere to close full-screen HD view</span>
+          </div>
+        </div>
+      )}
 
       {/* Size Chart Modal */}
       <SizeChartModal

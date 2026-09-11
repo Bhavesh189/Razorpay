@@ -41,17 +41,9 @@ export const Header = () => {
   const searchInputRef = useRef(null);
   const profileRef = useRef(null);
 
-  // Global Keyboard Shortcut: '/' or 'Ctrl+K' focuses search input, 'Escape' closes
+  // Keyboard Shortcut: 'Escape' closes search and profile dropdowns
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (
-        (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') ||
-        ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')
-      ) {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-        setIsSearchFocused(true);
-      }
       if (e.key === 'Escape') {
         setIsSearchFocused(false);
         setIsProfileOpen(false);
@@ -159,11 +151,7 @@ export const Header = () => {
                   onFocus={() => setIsSearchFocused(true)}
                   className="w-full bg-transparent text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none font-medium"
                 />
-                {!searchQuery && (
-                  <kbd className="hidden lg:inline-flex items-center text-[10px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded mr-1 select-none">
-                    / or ⌘K
-                  </kbd>
-                )}
+
                 {searchQuery && (
                   <button 
                     onClick={() => setSearchQuery("")}

@@ -113,12 +113,29 @@ app.post('/api/ai/chat', async (req, res) => {
 // 1.1 Dedicated Questionnaire & Structured Requirements Submission Endpoint
 app.post('/api/ai/requirements', async (req, res) => {
   try {
-    const { requirementSessionId, category, requirements = {}, history = [], cartContext = [], userProfile = {} } = req.body;
-
-    console.log(`[Infinity AI Agent] Processing Requirements Submission: category="${category}", priorities=[${(requirements.priorities || []).join(', ')}], budget=${requirements.isBudgetActive ? requirements.budget : 'Flexible'}`);
-    const result = await processAIAgentRequirements({
+    const {
+      sessionId,
       requirementSessionId,
       category,
+      questionId,
+      answer,
+      customInput,
+      isStep = false,
+      requirements = {},
+      history = [],
+      cartContext = [],
+      userProfile = {}
+    } = req.body;
+
+    console.log(`[Infinity AI Agent] Processing Requirements Submission: category="${category}", questionId="${questionId || 'final'}", priorities=[${(requirements.priorities || []).join(', ')}], budget=${requirements.isBudgetActive ? requirements.budget : 'Flexible'}`);
+    const result = await processAIAgentRequirements({
+      sessionId,
+      requirementSessionId,
+      category,
+      questionId,
+      answer,
+      customInput,
+      isStep,
       requirements,
       history,
       cartContext,

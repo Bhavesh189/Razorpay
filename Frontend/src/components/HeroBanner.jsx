@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { heroBanners, trustPillars } from '../data/banners';
 import { useShop } from '../context/ShopContext';
 import { SafeImage } from './SafeImage';
@@ -8,26 +8,51 @@ import {
   RotateCcw, 
   ChevronLeft, 
   ChevronRight, 
-  Sparkles,
-  ShoppingBag,
-  ShieldCheck,
-  Zap
+  Sparkles, 
+  ShoppingBag, 
+  ShieldCheck, 
+  Zap 
 } from 'lucide-react';
 
 export const HeroBanner = () => {
-  const { setSelectedCategory, setActiveModal } = useShop();
+  const { setSelectedCategory, setSelectedSubCategory, setSearchQuery, setActiveModal } = useShop();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const touchStartX = useRef(null);
 
-  // Auto-rotate hero slider
+  // Auto-rotate hero slider with hover pause and reset on slide change
   useEffect(() => {
+    if (isPaused) return;
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % heroBanners.length);
     }, 4500);
     return () => clearInterval(timer);
-  }, []);
+  }, [isPaused, currentSlide]);
 
-  const nextSlide = () => setCurrentSlide((prev) => (prev + 1) % heroBanners.length);
-  const prevSlide = () => setCurrentSlide((prev) => (prev - 1 + heroBanners.length) % heroBanners.length);
+  const nextSlide = (e) => {
+    if (e) e.stopPropagation();
+    setCurrentSlide((prev) => (prev + 1) % heroBanners.length);
+  };
+
+  const prevSlide = (e) => {
+    if (e) e.stopPropagation();
+    setCurrentSlide((prev) => (prev - 1 + heroBanners.length) % heroBanners.length);
+  };
+
+  const goToSlide = (idx, e) => {
+    if (e) e.stopPropagation();
+    setCurrentSlide(idx);
+  };
+
+  const handleBannerClick = (categoryTarget) => {
+    if (categoryTarget) {
+      setSelectedCategory(categoryTarget);
+      setSelectedSubCategory("all");
+      setSearchQuery("");
+    }
+    const el = document.getElementById('products-section');
+    el?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   const banner = heroBanners[currentSlide];
 
@@ -44,12 +69,26 @@ export const HeroBanner = () => {
     <section className="py-3 sm:py-6">
       <div className="max-w-[1400px] mx-auto px-4 lg:px-8 space-y-4 sm:space-y-6">
         
-        {/* Main Hero Banner Slider */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#4338ca] via-[#4f46e5] to-[#7c3aed] text-white shadow-xl min-h-[320px] md:min-h-[380px] flex items-center">
+        {/* Main Hero Banner Slider Container */}
+        <div 
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+          onTouchEnd={(e) => {
+            if (touchStartX.current === null) return;
+            const diff = touchStartX.current - e.changedTouches[0].clientX;
+            if (diff > 50) nextSlide();
+            else if (diff < -50) prevSlide();
+            touchStartX.current = null;
+          }}
+          onClick={() => handleBannerClick(banner.categoryTarget)}
+          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${banner.bgGradient || 'from-[#4338ca] via-[#4f46e5] to-[#7c3aed]'} text-white shadow-xl min-h-[320px] md:min-h-[380px] flex items-center transition-all duration-500 cursor-pointer group select-none`}
+        >
           
           {/* Subtle Background Pattern */}
           <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#fff_1.5px,transparent_1.5px)] [background-size:20px_20px] pointer-events-none"></div>
 
+          {/* Slide Content Grid */}
           <div className="relative z-10 w-full grid grid-cols-1 md:grid-cols-12 items-center p-6 sm:p-10 lg:p-12 gap-6">
             
             {/* Left Content */}
@@ -80,21 +119,23 @@ export const HeroBanner = () => {
               {/* CTA Buttons */}
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-3">
                 <button
-                  onClick={() => {
-                    if (banner.categoryTarget) {
-                      setSelectedCategory(banner.categoryTarget);
-                    }
-                    const el = document.getElementById('products-section');
-                    el?.scrollIntoView({ behavior: 'smooth' });
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleBannerClick(banner.categoryTarget);
                   }}
-                  className="bg-white text-indigo-700 hover:bg-yellow-300 hover:text-slate-900 font-extrabold px-6 py-3.5 rounded-xl shadow-lg hover:shadow-2xl transition-all text-xs sm:text-sm flex items-center gap-2 group cursor-pointer active:scale-95"
+                  className="bg-white text-indigo-700 hover:bg-yellow-300 hover:text-slate-900 font-extrabold px-6 py-3.5 rounded-xl shadow-lg hover:shadow-2xl transition-all text-xs sm:text-sm flex items-center gap-2 group/btn cursor-pointer active:scale-95"
                 >
-                  <ShoppingBag className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  <ShoppingBag className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
                   {banner.ctaText}
                 </button>
 
                 <button
-                  onClick={() => setActiveModal('downloadApp')}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveModal('downloadApp');
+                  }}
                   className="bg-white/10 hover:bg-white/20 text-white font-bold border border-white/30 px-5 py-3.5 rounded-xl transition-all text-xs sm:text-sm cursor-pointer backdrop-blur-md active:scale-95"
                 >
                   Download App
@@ -121,33 +162,44 @@ export const HeroBanner = () => {
 
           </div>
 
-          {/* Slider Arrows */}
+          {/* Slider Left Arrow Button */}
           <button
+            type="button"
             onClick={prevSlide}
-            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white p-2.5 rounded-full backdrop-blur-md transition-all active:scale-90"
+            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/75 text-white p-2.5 sm:p-3 rounded-full backdrop-blur-md transition-all active:scale-90 cursor-pointer shadow-lg hover:scale-110 border border-white/20 flex items-center justify-center"
             aria-label="Previous Slide"
           >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <button
-            onClick={nextSlide}
-            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/60 text-white p-2.5 rounded-full backdrop-blur-md transition-all active:scale-90"
-            aria-label="Next Slide"
-          >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
 
-          {/* Slider Dots */}
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2">
+          {/* Slider Right Arrow Button */}
+          <button
+            type="button"
+            onClick={nextSlide}
+            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/75 text-white p-2.5 sm:p-3 rounded-full backdrop-blur-md transition-all active:scale-90 cursor-pointer shadow-lg hover:scale-110 border border-white/20 flex items-center justify-center"
+            aria-label="Next Slide"
+          >
+            <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+          </button>
+
+          {/* Slider Dot Indicators */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 sm:gap-1.5 px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-md border border-white/20">
             {heroBanners.map((_, idx) => (
               <button
+                type="button"
                 key={idx}
-                onClick={() => setCurrentSlide(idx)}
-                className={`h-2 rounded-full transition-all ${
-                  currentSlide === idx ? 'w-7 bg-white' : 'w-2 bg-white/50'
-                }`}
-                aria-label={`Slide ${idx + 1}`}
-              />
+                onClick={(e) => goToSlide(idx, e)}
+                className="p-1.5 cursor-pointer flex items-center justify-center focus:outline-none"
+                aria-label={`Go to Slide ${idx + 1}`}
+              >
+                <span 
+                  className={`block h-2 rounded-full transition-all duration-300 ${
+                    currentSlide === idx 
+                      ? 'w-7 bg-white shadow-md' 
+                      : 'w-2 bg-white/50 hover:bg-white/80'
+                  }`}
+                />
+              </button>
             ))}
           </div>
 

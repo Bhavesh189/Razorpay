@@ -55,7 +55,9 @@ import {
   UserCheck,
   BookmarkCheck,
   Maximize2,
-  Minimize2
+  Minimize2,
+  History,
+  MessageSquare
 } from 'lucide-react';
 import { SafeImage } from './SafeImage';
 import confetti from 'canvas-confetti';
@@ -148,18 +150,37 @@ const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
   const [customInput, setCustomInput] = useState('');
   const [budget, setBudget] = useState(50000);
   const [isBudgetActive, setIsBudgetActive] = useState(false);
+  const customInputRef = useRef(null);
 
   if (!questionnaire) return null;
 
+  const isMultiSelect = questionnaire.type === "multi_select" || questionnaire.type === "multiple_choice";
+
   const toggleOption = (val) => {
     if (isSubmitted) return;
-    setSelectedOptions(prev => {
-      if (prev.includes(val)) {
-        return prev.filter(v => v !== val);
-      } else {
-        return [...prev, val];
-      }
-    });
+
+    if (val.toLowerCase() === "custom") {
+      customInputRef.current?.focus();
+      return;
+    }
+
+    if (val.toLowerCase() === "no preference") {
+      setSelectedOptions(["No Preference"]);
+      return;
+    }
+
+    if (isMultiSelect) {
+      setSelectedOptions(prev => {
+        const filtered = prev.filter(v => v.toLowerCase() !== "no preference");
+        if (filtered.includes(val)) {
+          return filtered.filter(v => v !== val);
+        } else {
+          return [...filtered, val];
+        }
+      });
+    } else {
+      setSelectedOptions([val]);
+    }
   };
 
   const handleBudgetSliderChange = (e) => {
@@ -202,7 +223,9 @@ const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
       priorities: selectedOptions,
       customRequirements: customInput.trim(),
       budget: isBudgetActive && budget ? Number(budget) : null,
-      isBudgetActive: Boolean(isBudgetActive && budget)
+      isBudgetActive: Boolean(isBudgetActive && budget),
+      questionId: questionnaire.id,
+      answer: selectedOptions
     };
 
     onSubmit(requirementsData, questionnaire);
@@ -228,17 +251,21 @@ const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
               {questionnaire.title || "Select Your Preferences"}
             </h4>
             <p className="text-[11px] text-slate-500 font-normal">
-              Choose one or more requirements to customize your matches
+              {questionnaire.text || (isMultiSelect ? "Choose one or more requirements to customize your matches" : "Choose your preferred option")}
             </p>
           </div>
         </div>
 
-        {selectedOptions.length > 0 && (
-          <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
-            <span>{selectedOptions.length} Selected</span>
-          </span>
-        )}
+        <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+          {isMultiSelect ? (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{selectedOptions.length > 0 ? `${selectedOptions.length} Selected` : "Multi-Select"}</span>
+            </>
+          ) : (
+            <span>Single Choice</span>
+          )}
+        </span>
       </div>
 
       {/* 1. Multi-Select MCQ Option Chips */}
@@ -382,6 +409,7 @@ const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
           <div className="relative">
             <Sparkles className="w-4 h-4 text-indigo-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
+              ref={customInputRef}
               type="text"
               value={customInput}
               onChange={(e) => setCustomInput(e.target.value)}
@@ -408,6 +436,8 @@ const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
     </div>
   );
 };
+
+export const DynamicQuestionCard = RequirementCard;
 
 // Helper to load Razorpay SDK
 const loadRazorpaySDK = () => {
@@ -447,11 +477,39 @@ export const AIAssistantModal = () => {
   const [voiceState, setVoiceState] = useState('idle'); // 'idle' | 'listening' | 'processing' | 'error'
   const isListening = voiceState === 'listening';
   const voiceSubmissionLockRef = useRef(false);
-  const recognitionRef = useRef(null);
-  const chatSessionIdRef = useRef(`sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const STORAGE_KEY = 'infinity_ai_chat';
+  const [showHistory, setShowHistory] = useState(false);
+  const isUserScrolledUpRef = useRef(false);
+
+  // Persistent Chat Sessions from browser LocalStorage
+  const [chatSessions, setChatSessions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('infinity_ai_chat');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.sessions) && parsed.sessions.length > 0) {
+          return parsed.sessions;
+        }
+      }
+    } catch (e) {
+      console.warn("LocalStorage parse error for infinity_ai_chat:", e);
+    }
+    return [];
+  });
+
+  const [activeSessionId, setActiveSessionId] = useState(() => {
+    try {
+      const saved = localStorage.getItem('infinity_ai_chat');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.activeSessionId) return parsed.activeSessionId;
+        if (parsed?.sessions?.[0]?.sessionId) return parsed.sessions[0].sessionId;
+      }
+    } catch (e) { }
+    return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  });
+  const chatSessionIdRef = useRef(activeSessionId);
   const [isPaying, setIsPaying] = useState(false);
-  const [campaignTime, setCampaignTime] = useState({ min: 14, sec: 35 });
-  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
 
   // Multimodal Vision Image Upload State with WebP Compression
   const fileInputRef = useRef(null);
@@ -548,15 +606,133 @@ export const AIAssistantModal = () => {
     preferredBudget: "",
     shopperPersona: "Smart Shopper",
     totalConversations: 0,
-    unlockedCoupons: ["FIRST50", "VIP100"]
+    unlockedCoupons: ["FIRST50"]
   }));
 
-  // Ensure stale localStorage chat history is cleared
+  // Restore messages on session switch
   useEffect(() => {
-    try {
-      localStorage.removeItem('infinity_ai_chat_history');
-    } catch (e) { }
-  }, []);
+    const currentSession = chatSessions.find(s => s.sessionId === activeSessionId);
+    if (currentSession && Array.isArray(currentSession.messages) && currentSession.messages.length > 0) {
+      setMessages(currentSession.messages);
+      chatSessionIdRef.current = currentSession.sessionId;
+    } else {
+      setMessages([defaultAiWelcomeMessage]);
+      chatSessionIdRef.current = activeSessionId;
+    }
+  }, [activeSessionId]);
+
+  // Sync active messages to LocalStorage
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+
+    setChatSessions(prevSessions => {
+      const now = new Date().toISOString();
+      const existingIdx = prevSessions.findIndex(s => s.sessionId === activeSessionId);
+
+      const firstUserMsg = messages.find(m => m.sender === 'user');
+      const sessionTitle = firstUserMsg
+        ? (firstUserMsg.text.slice(0, 32) + (firstUserMsg.text.length > 32 ? '...' : ''))
+        : "Shopping Conversation";
+
+      let updatedSessions;
+      if (existingIdx >= 0) {
+        const existing = prevSessions[existingIdx];
+        const updated = {
+          ...existing,
+          title: existing.title && existing.title !== "New Conversation" && existing.title !== "Shopping Conversation" ? existing.title : sessionTitle,
+          updatedAt: now,
+          messages: messages
+        };
+        updatedSessions = [
+          updated,
+          ...prevSessions.filter((_, i) => i !== existingIdx)
+        ];
+      } else {
+        const newSession = {
+          sessionId: activeSessionId,
+          title: sessionTitle,
+          createdAt: now,
+          updatedAt: now,
+          messages: messages,
+          shoppingSessions: []
+        };
+        updatedSessions = [newSession, ...prevSessions];
+      }
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          activeSessionId,
+          sessions: updatedSessions.slice(0, 30)
+        }));
+      } catch (err) {
+        console.warn("Failed to persist infinity_ai_chat:", err);
+      }
+
+      return updatedSessions;
+    });
+  }, [messages, activeSessionId]);
+
+  const handleCreateNewChat = () => {
+    const newId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    chatSessionIdRef.current = newId;
+    setActiveSessionId(newId);
+    setMessages([defaultAiWelcomeMessage]);
+    setShowHistory(false);
+    setInputQuery("");
+    setSelectedImage(null);
+    setImagePreview(null);
+    showToast("✨ Started a new conversation!");
+  };
+
+  const handleSwitchSession = (sessionId) => {
+    setActiveSessionId(sessionId);
+    chatSessionIdRef.current = sessionId;
+    setShowHistory(false);
+  };
+
+  const handleDeleteSession = (sessionIdToDelete) => {
+    setChatSessions(prev => {
+      const remaining = prev.filter(s => s.sessionId !== sessionIdToDelete);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          activeSessionId: activeSessionId === sessionIdToDelete ? (remaining[0]?.sessionId || null) : activeSessionId,
+          sessions: remaining
+        }));
+      } catch (e) { }
+
+      if (activeSessionId === sessionIdToDelete) {
+        if (remaining.length > 0) {
+          setActiveSessionId(remaining[0].sessionId);
+        } else {
+          handleCreateNewChat();
+        }
+      }
+      return remaining;
+    });
+    showToast("🗑️ Chat deleted");
+  };
+
+  // Group sessions by Today, Yesterday, Older
+  const historyGroups = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const groups = { today: [], yesterday: [], older: [] };
+    chatSessions.forEach(sess => {
+      const d = new Date(sess.updatedAt || sess.createdAt || Date.now());
+      d.setHours(0, 0, 0, 0);
+      if (d.getTime() >= today.getTime()) {
+        groups.today.push(sess);
+      } else if (d.getTime() >= yesterday.getTime()) {
+        groups.yesterday.push(sess);
+      } else {
+        groups.older.push(sess);
+      }
+    });
+    return groups;
+  }, [chatSessions]);
 
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [submittedSessions, setSubmittedSessions] = useState(() => new Set());
@@ -577,32 +753,20 @@ export const AIAssistantModal = () => {
   const chatContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  const isNearBottom = () => {
-    if (!chatContainerRef.current) return true;
-    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-    return scrollHeight - scrollTop - clientHeight < 200;
+  const handleChatScroll = (e) => {
+    const el = e.currentTarget;
+    const isScrolledUp = el.scrollHeight - el.scrollTop - el.clientHeight > 120;
+    isUserScrolledUpRef.current = isScrolledUp;
   };
 
-  const scrollToBottom = () => {
-    if (isNearBottom()) {
+  const scrollToBottom = (force = false) => {
+    if (force || !isUserScrolledUpRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  // Campaign live countdown ticker
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCampaignTime(prev => {
-        if (prev.sec > 0) return { ...prev, sec: prev.sec - 1 };
-        if (prev.min > 0) return { min: prev.min - 1, sec: 59 };
-        return { min: 15, sec: 0 };
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (isNearBottom()) {
+    if (!isUserScrolledUpRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, loading]);
@@ -1251,48 +1415,6 @@ export const AIAssistantModal = () => {
     }
   };
 
-  // Clear Long-Term Local Browser Memory & Reset AI Session
-  const handleClearMemory = () => {
-    try {
-      localStorage.removeItem('infinity_ai_chat_history');
-      localStorage.removeItem('infinity_ai_user_persona');
-    } catch (e) { }
-    const freshPersona = {
-      learnedInterests: [],
-      preferredBudget: "",
-      shopperPersona: "Smart Shopper",
-      totalConversations: 0,
-      unlockedCoupons: ["FIRST50", "VIP100"]
-    };
-    setUserPersona(freshPersona);
-    setMessages([
-      {
-        ...defaultWelcomeMessage,
-        id: `msg-welcome-${Date.now()}`,
-        text: "🧠 **AI Memory & Chat History Reset!**\n\nYour profile has been refreshed to clean state. What would you like to explore today? 🛍️"
-      }
-    ]);
-    showToast("🧠 AI Memory & History reset!");
-  };
-
-  // Claim VIP Secret Coupon
-  const handleClaimVIPCoupon = (couponCode = "VIP100") => {
-    try {
-      confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-    } catch { }
-    const res = applyCouponCode(couponCode);
-    setMessages(prev => [
-      ...prev,
-      {
-        id: `ai-coupon-${Date.now()}`,
-        sender: "ai",
-        text: `🎉 **VIP Secret Coupon Unlocked!**\n\nCode **"${couponCode}"** (Flat ₹100 OFF) is now active on your order!\n\n${res?.message || 'Discount applied for your 1-Click Razorpay checkout.'}\n\nReview your cart and pay securely whenever ready! ⚡`,
-        products: [],
-        suggestedFollowUpQueries: ["Show My Cart 🛒", "Proceed to Razorpay Checkout ⚡", "Continue Shopping 🛍️"]
-      }
-    ]);
-    showToast(`🎁 VIP Coupon ${couponCode} Claimed!`);
-  };
 
   // Web Speech API Voice Search with Idle, Listening, Processing, Error states
   const handleToggleVoice = () => {
@@ -1476,29 +1598,35 @@ export const AIAssistantModal = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {/* Status Badge */}
-            <div className="bg-white/15 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-white flex items-center gap-1.5 border border-white/20">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Online</span>
-            </div>
-
-            {/* AI Memory Toggle (Small Subtle Button) */}
+          <div className="flex items-center gap-2">
+            {/* New Chat Button */}
             <button
-              onClick={() => setShowMemoryPanel(!showMemoryPanel)}
-              className={`p-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${showMemoryPanel || (userPersona?.learnedInterests?.length > 0)
-                  ? "bg-white/30 text-white"
-                  : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white"
-                }`}
-              title="AI Long-Term Browser Memory Profile"
+              onClick={handleCreateNewChat}
+              className="bg-white/15 hover:bg-white/25 text-white px-2.5 py-1 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 border border-white/20 cursor-pointer active:scale-95"
+              title="Start a new chat session"
             >
-              <Brain className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">New Chat</span>
+            </button>
+
+            {/* Chat History Drawer Toggle */}
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                showHistory
+                  ? "bg-white/30 text-white border-white/40 shadow-xs"
+                  : "bg-white/15 text-white/90 hover:bg-white/25 hover:text-white border-white/20"
+              }`}
+              title="View Chat History"
+            >
+              <History className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">History</span>
             </button>
 
             {/* Full Screen Mode Toggle */}
             <button
               onClick={() => setIsFullScreen(!isFullScreen)}
-              className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/20 transition-all cursor-pointer"
+              className="p-1.5 rounded-xl text-white/80 hover:text-white hover:bg-white/20 transition-all cursor-pointer"
               title={isFullScreen ? "Exit Full Screen" : "Expand Full Screen"}
             >
               {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -1514,42 +1642,168 @@ export const AIAssistantModal = () => {
           </div>
         </div>
 
-        {/* 2. OPTIONAL AI MEMORY PANEL (Collapsible) */}
-        {showMemoryPanel && (
-          <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-900 border-b border-indigo-700/60 p-3 sm:px-5 sm:py-2.5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-md animate-in slide-in-from-top-2 flex-shrink-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Brain className="w-4 h-4 text-amber-300" />
-              <div className="text-xs">
-                <span className="font-bold text-amber-300 mr-2">Learned Profile:</span>
-                <span className="text-indigo-200">
-                  {userPersona.learnedInterests?.join(", ") || "Learning preferences as you chat..."}
-                </span>
+        {/* MAIN CONTENT AREA */}
+        <div className="flex-1 flex overflow-hidden bg-[#f8faff] relative">
+
+          {/* Slide-out Chat History Drawer */}
+          {showHistory && (
+            <div className="absolute inset-y-0 left-0 w-72 sm:w-80 bg-white border-r border-slate-200 shadow-2xl z-30 flex flex-col animate-in slide-in-from-left duration-200">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                <div className="flex items-center gap-2">
+                  <History className="w-4 h-4 text-indigo-600" />
+                  <span className="font-bold text-sm text-slate-800">Chat History</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handleCreateNewChat}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-all active:scale-95"
+                    title="New Chat"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>New</span>
+                  </button>
+                  <button
+                    onClick={() => setShowHistory(false)}
+                    className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg cursor-pointer transition-all"
+                    title="Close History"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3 space-y-4 no-scrollbar">
+                {chatSessions.length === 0 ? (
+                  <div className="text-center py-12 px-4 text-slate-400">
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2 text-slate-300 opacity-60" />
+                    <p className="text-xs font-medium">No previous chats yet</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Start chatting to see conversations saved here.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Today Group */}
+                    {historyGroups.today.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider px-2 mb-1.5">
+                          Today
+                        </div>
+                        <div className="space-y-1">
+                          {historyGroups.today.map((sess) => (
+                            <div
+                              key={sess.sessionId}
+                              onClick={() => handleSwitchSession(sess.sessionId)}
+                              className={`group w-full text-left px-3 py-2.5 rounded-xl text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                                activeSessionId === sess.sessionId
+                                  ? "bg-indigo-50 border border-indigo-200 text-indigo-950 font-bold shadow-xs"
+                                  : "hover:bg-slate-50 text-slate-700 border border-transparent font-medium"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${activeSessionId === sess.sessionId ? "text-indigo-600" : "text-slate-400 group-hover:text-indigo-500"}`} />
+                                <span className="truncate">{sess.title || "Shopping Chat"}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSession(sess.sessionId);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 p-1 rounded-md transition-all cursor-pointer hover:bg-rose-50"
+                                title="Delete chat"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Yesterday Group */}
+                    {historyGroups.yesterday.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider px-2 mb-1.5">
+                          Yesterday
+                        </div>
+                        <div className="space-y-1">
+                          {historyGroups.yesterday.map((sess) => (
+                            <div
+                              key={sess.sessionId}
+                              onClick={() => handleSwitchSession(sess.sessionId)}
+                              className={`group w-full text-left px-3 py-2.5 rounded-xl text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                                activeSessionId === sess.sessionId
+                                  ? "bg-indigo-50 border border-indigo-200 text-indigo-950 font-bold shadow-xs"
+                                  : "hover:bg-slate-50 text-slate-700 border border-transparent font-medium"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${activeSessionId === sess.sessionId ? "text-indigo-600" : "text-slate-400 group-hover:text-indigo-500"}`} />
+                                <span className="truncate">{sess.title || "Shopping Chat"}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSession(sess.sessionId);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 p-1 rounded-md transition-all cursor-pointer hover:bg-rose-50"
+                                title="Delete chat"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Older Group */}
+                    {historyGroups.older.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider px-2 mb-1.5">
+                          Older
+                        </div>
+                        <div className="space-y-1">
+                          {historyGroups.older.map((sess) => (
+                            <div
+                              key={sess.sessionId}
+                              onClick={() => handleSwitchSession(sess.sessionId)}
+                              className={`group w-full text-left px-3 py-2.5 rounded-xl text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                                activeSessionId === sess.sessionId
+                                  ? "bg-indigo-50 border border-indigo-200 text-indigo-950 font-bold shadow-xs"
+                                  : "hover:bg-slate-50 text-slate-700 border border-transparent font-medium"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${activeSessionId === sess.sessionId ? "text-indigo-600" : "text-slate-400 group-hover:text-indigo-500"}`} />
+                                <span className="truncate">{sess.title || "Shopping Chat"}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSession(sess.sessionId);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 p-1 rounded-md transition-all cursor-pointer hover:bg-rose-50"
+                                title="Delete chat"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <button
-                onClick={() => handleClaimVIPCoupon("VIP100")}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-2 py-1 rounded-lg"
-              >
-                VIP ₹100 🎁
-              </button>
-              <button
-                onClick={handleClearMemory}
-                className="bg-white/10 hover:bg-rose-600 text-white text-[10px] font-bold p-1.5 rounded-lg"
-                title="Reset Memory"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* MAIN CONTENT AREA */}
-        <div className="flex-1 flex overflow-hidden bg-[#f8faff]">
+          )}
 
           {/* 3. CHAT STREAM (MESSAGES) */}
           <div
             ref={chatContainerRef}
+            onScroll={handleChatScroll}
             className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#f8faff] no-scrollbar"
           >
             {messages.map((msg) => (

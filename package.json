@@ -1,0 +1,13 @@
+{
+  "name": "infinity-store-root",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node Backend/server.js",
+    "backend": "npm run dev --prefix Backend",
+    "backend:start": "npm run start --prefix Backend",
+    "frontend": "npm run dev --prefix Frontend",
+    "test": "npm test --prefix Backend"
+  }
+}
