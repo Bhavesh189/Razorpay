@@ -20,10 +20,10 @@ export const CategoryStories = () => {
         
         {/* Section Header */}
         <div className="flex items-center justify-between mb-2 sm:mb-3">
-          <h2 className="text-sm sm:text-lg font-bold text-slate-900 font-['Outfit']">
+          <h2 className="text-sm sm:text-lg font-bold text-slate-200 font-['Outfit']">
             Top Categories to Explore
           </h2>
-          <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+          <span className="text-xs text-slate-500 font-medium hidden sm:inline">
             Scroll to see more →
           </span>
         </div>
@@ -37,15 +37,15 @@ export const CategoryStories = () => {
           >
             <div className={`w-14 h-14 sm:w-20 sm:h-20 rounded-full p-0.5 sm:p-1 transition-all ${
               selectedCategory === "all"
-                ? 'ring-2 ring-indigo-600 ring-offset-2 scale-105 shadow-md'
-                : 'border border-slate-200 group-hover:border-indigo-600 group-hover:scale-105'
+                ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-[#0a0a0f] scale-105 shadow-md shadow-amber-500/20'
+                : 'border border-[#2a2a3a] group-hover:border-amber-500/50 group-hover:scale-105'
             }`}>
-              <div className="w-full h-full rounded-full bg-gradient-to-tr from-indigo-600 via-purple-600 to-cyan-500 flex items-center justify-center text-white font-extrabold text-xs sm:text-sm shadow-inner">
+              <div className="w-full h-full rounded-full bg-gradient-to-tr from-amber-500 via-orange-500 to-cyan-500 flex items-center justify-center text-black font-extrabold text-xs sm:text-sm shadow-inner">
                 All
               </div>
             </div>
             <span className={`text-[11px] sm:text-xs text-center font-semibold ${
-              selectedCategory === "all" ? 'text-indigo-600 font-bold' : 'text-slate-700'
+              selectedCategory === "all" ? 'text-amber-400 font-bold' : 'text-slate-400'
             }`}>
               All Items
             </span>
@@ -63,8 +63,8 @@ export const CategoryStories = () => {
               >
                 <div className={`w-14 h-14 sm:w-20 sm:h-20 rounded-full p-0.5 transition-all overflow-hidden ${
                   isSelected
-                    ? 'ring-2 ring-indigo-600 ring-offset-2 scale-105 shadow-md'
-                    : 'border border-slate-200 group-hover:border-indigo-600 group-hover:scale-105'
+                    ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-[#0a0a0f] scale-105 shadow-md shadow-amber-500/20'
+                    : 'border border-[#2a2a3a] group-hover:border-amber-500/50 group-hover:scale-105'
                 }`}>
                   <div className="w-full h-full rounded-full overflow-hidden">
                     <SafeImage
@@ -75,7 +75,7 @@ export const CategoryStories = () => {
                   </div>
                 </div>
                 <span className={`text-[11px] sm:text-xs text-center font-medium max-w-[70px] sm:max-w-[80px] truncate ${
-                  isSelected ? 'text-indigo-600 font-bold' : 'text-slate-700 group-hover:text-indigo-600'
+                  isSelected ? 'text-amber-400 font-bold' : 'text-slate-400 group-hover:text-amber-400'
                 }`}>
                   {item.title}
                 </span>

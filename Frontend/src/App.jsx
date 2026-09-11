@@ -23,18 +23,20 @@ import { Footer } from './components/Footer';
 import { SlidersHorizontal, Sparkles, X } from 'lucide-react';
 
 const MainLayout = () => {
-  const { toastMessage, resetFilters } = useShop();
+  const { toastMessage, resetFilters, searchQuery } = useShop();
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isMobileCategoryDrawerOpen, setIsMobileCategoryDrawerOpen] = useState(false);
 
+  const isSearchActive = searchQuery && searchQuery.trim().length > 0;
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 pb-14 md:pb-0">
+    <div className="min-h-screen flex flex-col bg-[#0a0a0f] pb-14 md:pb-0">
       
       {/* Top Promotional Announcement Ticker */}
-      <div className="bg-gradient-to-r from-[#4338ca] via-[#4f46e5] to-[#7c3aed] text-white text-[11px] sm:text-xs py-2 px-4 text-center font-semibold tracking-wide flex items-center justify-center gap-2 shadow-sm">
-        <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin" />
+      <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-cyan-500/10 border-b border-amber-500/20 text-amber-100 text-[11px] sm:text-xs py-2 px-4 text-center font-semibold tracking-wide flex items-center justify-center gap-2">
+        <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
         <span>
-          Mega Savings Festival: Flat <strong className="text-yellow-300">₹50 OFF</strong> on 1st Order • Use Code: <strong className="underline text-yellow-300">FIRST50</strong> • 100% Free Delivery PAN India
+          Mega Savings Festival: Flat <strong className="text-amber-400">₹50 OFF</strong> on 1st Order • Use Code: <strong className="underline text-amber-400">FIRST50</strong> • 100% Free Delivery PAN India
         </span>
       </div>
 
@@ -50,14 +52,19 @@ const MainLayout = () => {
       {/* Page Body */}
       <main className="flex-1 space-y-4 sm:space-y-6">
         
-        {/* Promotional Hero Carousel & Trust Pillars */}
-        <HeroBanner />
+        {/* Home Page Sections - Only visible when NOT searching */}
+        {!isSearchActive && (
+          <>
+            {/* Promotional Hero Carousel & Trust Pillars */}
+            <HeroBanner />
 
-        {/* Circular Category Avatars */}
-        <CategoryStories />
+            {/* Circular Category Avatars */}
+            <CategoryStories />
 
-        {/* Budget Deals Store & Supplier Highlight */}
-        <BudgetZone />
+            {/* Budget Deals Store & Supplier Highlight */}
+            <BudgetZone />
+          </>
+        )}
 
         {/* Main Catalog & Filter Grid Section */}
         <div className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-2 sm:pt-4">

@@ -58,10 +58,10 @@ export const HeroBanner = () => {
 
   const renderIcon = (name) => {
     switch (name) {
-      case 'Truck': return <Truck className="w-6 h-6 text-indigo-600" />;
-      case 'Banknote': return <Banknote className="w-6 h-6 text-indigo-600" />;
-      case 'RotateCcw': return <RotateCcw className="w-6 h-6 text-indigo-600" />;
-      default: return <ShieldCheck className="w-6 h-6 text-indigo-600" />;
+      case 'Truck': return <Truck className="w-6 h-6 text-amber-500" />;
+      case 'Banknote': return <Banknote className="w-6 h-6 text-amber-500" />;
+      case 'RotateCcw': return <RotateCcw className="w-6 h-6 text-amber-500" />;
+      default: return <ShieldCheck className="w-6 h-6 text-amber-500" />;
     }
   };
 
@@ -82,19 +82,19 @@ export const HeroBanner = () => {
             touchStartX.current = null;
           }}
           onClick={() => handleBannerClick(banner.categoryTarget)}
-          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${banner.bgGradient || 'from-[#4338ca] via-[#4f46e5] to-[#7c3aed]'} text-white shadow-xl min-h-[320px] md:min-h-[380px] flex items-center transition-all duration-500 cursor-pointer group select-none`}
+          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${banner.bgGradient || 'from-[#4338ca] via-[#4f46e5] to-[#7c3aed]'} text-white shadow-xl min-h-[540px] max-[380px]:min-h-[570px] sm:min-h-[440px] md:min-h-[420px] flex items-center transition-all duration-500 cursor-pointer group select-none`}
         >
           
           {/* Subtle Background Pattern */}
           <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#fff_1.5px,transparent_1.5px)] [background-size:20px_20px] pointer-events-none"></div>
 
           {/* Slide Content Grid */}
-          <div className="relative z-10 w-full grid grid-cols-1 md:grid-cols-12 items-center p-6 sm:p-10 lg:p-12 gap-6">
+          <div className="relative z-10 w-full grid grid-cols-1 md:grid-cols-12 items-center px-10 py-9 max-[380px]:px-9 sm:px-16 sm:py-10 lg:px-20 lg:py-12 gap-7 sm:gap-6">
             
             {/* Left Content */}
             <div className="md:col-span-7 space-y-3 sm:space-y-4 text-center md:text-left">
-              <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3.5 py-1 rounded-full text-xs md:text-sm font-bold tracking-wide text-amber-300 shadow-sm">
-                <Sparkles className="w-4 h-4 text-yellow-300 animate-spin" />
+              <div className="inline-flex items-center gap-2 bg-amber-500/15 backdrop-blur-md px-3.5 py-1 rounded-full text-xs md:text-sm font-bold tracking-wide text-amber-400 shadow-sm border border-amber-500/20">
+                <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
                 {banner.badge}
               </div>
 
@@ -109,8 +109,8 @@ export const HeroBanner = () => {
               {/* Perks bullets */}
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-1">
                 {banner.perks.map((perk, idx) => (
-                  <span key={idx} className="inline-flex items-center gap-1.5 text-xs font-semibold bg-black/25 border border-white/20 px-3 py-1 rounded-lg text-white backdrop-blur-sm">
-                    <Zap className="w-3 h-3 text-yellow-300" />
+                  <span key={idx} className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white/5 border border-white/10 px-3 py-1 rounded-lg text-white backdrop-blur-sm">
+                    <Zap className="w-3 h-3 text-amber-400" />
                     {perk}
                   </span>
                 ))}
@@ -124,7 +124,7 @@ export const HeroBanner = () => {
                     e.stopPropagation();
                     handleBannerClick(banner.categoryTarget);
                   }}
-                  className="bg-white text-indigo-700 hover:bg-yellow-300 hover:text-slate-900 font-extrabold px-6 py-3.5 rounded-xl shadow-lg hover:shadow-2xl transition-all text-xs sm:text-sm flex items-center gap-2 group/btn cursor-pointer active:scale-95"
+                  className="bg-gradient-to-r from-amber-400 to-amber-500 text-black hover:from-amber-500 hover:to-amber-600 font-extrabold px-4 sm:px-6 py-3 sm:py-3.5 rounded-xl shadow-lg hover:shadow-2xl hover:shadow-amber-500/20 transition-all text-[11px] sm:text-sm flex items-center gap-2 group/btn cursor-pointer active:scale-95"
                 >
                   <ShoppingBag className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
                   {banner.ctaText}
@@ -136,7 +136,7 @@ export const HeroBanner = () => {
                     e.stopPropagation();
                     setActiveModal('downloadApp');
                   }}
-                  className="bg-white/10 hover:bg-white/20 text-white font-bold border border-white/30 px-5 py-3.5 rounded-xl transition-all text-xs sm:text-sm cursor-pointer backdrop-blur-md active:scale-95"
+                  className="bg-white/5 hover:bg-white/10 text-white font-bold border border-white/15 px-4 sm:px-5 py-3 sm:py-3.5 rounded-xl transition-all text-[11px] sm:text-sm cursor-pointer backdrop-blur-md active:scale-95"
                 >
                   Download App
                 </button>
@@ -145,7 +145,7 @@ export const HeroBanner = () => {
 
             {/* Right Banner Image Showcase */}
             <div className="md:col-span-5 flex justify-center relative">
-              <div className="relative w-48 sm:w-60 md:w-72 aspect-square">
+              <div className="relative w-40 max-[380px]:w-36 sm:w-56 md:w-64 lg:w-72 aspect-square">
                 <div className="absolute inset-0 bg-white/20 rounded-3xl transform rotate-3 filter blur-md"></div>
                 <div className="relative w-full h-full rounded-3xl overflow-hidden shadow-2xl border-2 border-white/40 transform -rotate-2 hover:rotate-0 transition-transform duration-500">
                   <SafeImage
@@ -154,7 +154,7 @@ export const HeroBanner = () => {
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <span className="absolute -bottom-2 -left-2 bg-gradient-to-r from-amber-400 to-amber-500 text-slate-900 font-black text-xs px-3 py-1 rounded-lg shadow-lg uppercase tracking-wider">
+                <span className="absolute -bottom-2 -left-2 bg-gradient-to-r from-amber-400 to-amber-500 text-black font-black text-xs px-3 py-1 rounded-lg shadow-lg uppercase tracking-wider">
                   Special Offer
                 </span>
               </div>
@@ -166,7 +166,7 @@ export const HeroBanner = () => {
           <button
             type="button"
             onClick={prevSlide}
-            className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/75 text-white p-2.5 sm:p-3 rounded-full backdrop-blur-md transition-all active:scale-90 cursor-pointer shadow-lg hover:scale-110 border border-white/20 flex items-center justify-center"
+            className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/75 text-white p-2 sm:p-2.5 rounded-full backdrop-blur-md transition-all active:scale-90 cursor-pointer shadow-lg hover:scale-110 border border-white/20 flex items-center justify-center"
             aria-label="Previous Slide"
           >
             <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -176,7 +176,7 @@ export const HeroBanner = () => {
           <button
             type="button"
             onClick={nextSlide}
-            className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/75 text-white p-2.5 sm:p-3 rounded-full backdrop-blur-md transition-all active:scale-90 cursor-pointer shadow-lg hover:scale-110 border border-white/20 flex items-center justify-center"
+            className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/75 text-white p-2 sm:p-2.5 rounded-full backdrop-blur-md transition-all active:scale-90 cursor-pointer shadow-lg hover:scale-110 border border-white/20 flex items-center justify-center"
             aria-label="Next Slide"
           >
             <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -206,17 +206,17 @@ export const HeroBanner = () => {
         </div>
 
         {/* Infinity 3-Pillar Trust Banner */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 bg-white border border-slate-200/90 rounded-2xl p-4 shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 bg-[#13131a] border border-[#1e1e2e] rounded-2xl p-4 shadow-sm">
           {trustPillars.map((item) => (
             <div 
               key={item.id}
-              className="flex items-center gap-3.5 p-2 rounded-xl hover:bg-indigo-50/50 transition-colors"
+              className="flex items-center gap-3.5 p-2 rounded-xl hover:bg-amber-500/5 transition-colors"
             >
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0 shadow-inner">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
                 {renderIcon(item.icon)}
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
+                <h3 className="text-sm font-bold text-slate-200">{item.title}</h3>
                 <p className="text-xs text-slate-500">{item.desc}</p>
               </div>
             </div>

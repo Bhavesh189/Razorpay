@@ -9,21 +9,21 @@ export const AIAssistantButton = () => {
     <div className="fixed bottom-20 md:bottom-8 right-4 sm:right-8 z-40 animate-in slide-in-from-bottom-5">
       <button
         onClick={() => setActiveModal('aiAssistant')}
-        className="group relative flex items-center gap-2.5 bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#06b6d4] hover:from-[#4338ca] hover:to-[#0891b2] text-white p-3.5 sm:px-5 sm:py-3.5 rounded-full shadow-2xl hover:shadow-indigo-500/50 hover:scale-105 active:scale-95 transition-all duration-300 border-2 border-white/40 cursor-pointer"
+        className="group relative flex items-center gap-2.5 bg-gradient-to-r from-amber-600 via-orange-600 to-orange-700 hover:from-amber-500 hover:via-orange-500 hover:to-orange-600 text-white p-2.5 sm:px-5 sm:py-3 rounded-full shadow-[0_10px_30px_rgba(245,158,11,0.4)] hover:shadow-[0_12px_36px_rgba(245,158,11,0.6)] hover:scale-105 active:scale-95 transition-all duration-300 border-2 border-white/80 ring-2 ring-amber-300/40 cursor-pointer"
         aria-label="Open AI Shopping Assistant"
       >
         {/* Glow Ping Ring */}
-        <span className="absolute -inset-0.5 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400 opacity-60 blur group-hover:opacity-100 transition-opacity animate-pulse"></span>
+        <span className="absolute -inset-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 opacity-40 blur-md group-hover:opacity-80 transition-opacity animate-pulse"></span>
 
         <div className="relative flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md">
-            <Sparkles className="w-4 h-4 text-yellow-300 animate-spin" />
+          <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-md">
+            <Sparkles className="w-4 h-4 text-orange-600 animate-spin" />
           </div>
-          <span className="text-xs sm:text-sm font-black font-['Outfit'] tracking-wide hidden xs:inline-block">
-            Ask AI Agent
+          <span className="text-xs sm:text-sm font-extrabold font-['Outfit'] tracking-wide">
+            Ask AI
           </span>
-          <span className="hidden sm:inline-block text-[10px] bg-yellow-300 text-slate-950 font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-            AI 2.0
+          <span className="hidden sm:inline-block text-[10px] bg-white text-orange-700 font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shadow-sm">
+            Agent
           </span>
         </div>
       </button>

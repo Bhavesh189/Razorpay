@@ -32,12 +32,12 @@ export const ProductGrid = () => {
     <section id="products-section" className="space-y-4">
       
       {/* 1. Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#13131a] border border-[#1e1e2e] rounded-2xl p-4">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900 capitalize font-['Outfit'] flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-200 capitalize font-['Outfit'] flex items-center gap-2">
             <span>{getHeading()}</span>
             {filters.onlyInfinityMall && (
-              <span className="text-xs bg-indigo-50 text-indigo-700 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-indigo-200">
+              <span className="text-xs bg-amber-500/10 text-amber-400 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-amber-500/20">
                 <Sparkles className="w-3 h-3 text-amber-500" /> Infinity Mall
               </span>
             )}
@@ -54,7 +54,7 @@ export const ProductGrid = () => {
             <select
               value={filters.sortBy}
               onChange={(e) => setFilters(prev => ({ ...prev, sortBy: e.target.value }))}
-              className="text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:border-indigo-600 cursor-pointer"
+              className="text-xs font-semibold text-slate-300 bg-[#1e1e2e] border border-[#2a2a3a] rounded-xl px-3 py-2 pr-8 focus:outline-none focus:border-amber-500/50 cursor-pointer"
             >
               <option value="relevance">Relevance</option>
               <option value="price-low">Price: Low to High</option>
@@ -68,12 +68,12 @@ export const ProductGrid = () => {
 
       {/* Did You Mean Suggestion Banner */}
       {searchDidYouMean && searchQuery && searchDidYouMean.toLowerCase() !== searchQuery.toLowerCase().trim() && (
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-3 px-4 flex items-center justify-between text-xs text-amber-900 shadow-sm animate-fade-in">
+        <div className="bg-gradient-to-r from-amber-500/5 to-orange-500/5 border border-amber-500/20 rounded-2xl p-3 px-4 flex items-center justify-between text-xs text-amber-200 animate-fade-in">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-amber-800">Did you mean:</span>
+            <span className="font-semibold text-amber-300">Did you mean:</span>
             <button
               onClick={() => setSearchQuery(searchDidYouMean)}
-              className="font-bold underline text-indigo-700 hover:text-indigo-900 cursor-pointer bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-xs hover:shadow-sm transition-all"
+              className="font-bold underline text-amber-400 hover:text-amber-300 cursor-pointer bg-[#1e1e2e] px-2 py-0.5 rounded-lg border border-amber-500/20 shadow-xs hover:shadow-sm transition-all"
             >
               "{searchDidYouMean}"
             </button>
@@ -97,7 +97,7 @@ export const ProductGrid = () => {
               <button
                 onClick={loadMoreProducts}
                 disabled={isProductsLoading}
-                className="bg-white hover:bg-indigo-50 border-2 border-indigo-600 text-indigo-700 hover:text-indigo-800 text-xs sm:text-sm font-black px-8 py-3.5 rounded-2xl shadow-sm hover:shadow-md transition-all inline-flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-60"
+                className="bg-[#13131a] hover:bg-[#1e1e2e] border-2 border-amber-500/60 text-amber-300 hover:text-amber-200 text-xs sm:text-sm font-black px-8 py-3.5 rounded-2xl shadow-sm hover:shadow-md transition-all inline-flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-60"
               >
                 {isProductsLoading ? (
                   <>
@@ -116,13 +116,13 @@ export const ProductGrid = () => {
         </div>
       ) : (
         /* Empty State */
-        <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center space-y-4 shadow-sm">
-          <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+        <div className="bg-[#13131a] border border-[#2a2a3a] rounded-3xl p-12 text-center space-y-4 shadow-xl shadow-black/20">
+          <div className="w-16 h-16 bg-indigo-500/10 text-indigo-300 rounded-full flex items-center justify-center mx-auto shadow-inner">
             <PackageOpen className="w-8 h-8" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-slate-900">No matching products found</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            <h3 className="text-base font-bold text-slate-200">No matching products found</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
               We couldn't find any products matching your current filters in our 100,000+ catalog. Try resetting the filters or searching for something else.
             </p>
           </div>

@@ -15,42 +15,42 @@ export const InfinityLogo = ({ className = "h-9", onClick }) => {
       >
         <defs>
           <linearGradient id="infinityBrandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#4f46e5" />
-            <stop offset="50%" stopColor="#7c3aed" />
+            <stop offset="0%" stopColor="#f59e0b" />
+            <stop offset="50%" stopColor="#d97706" />
             <stop offset="100%" stopColor="#06b6d4" />
           </linearGradient>
           <linearGradient id="loopGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" />
-            <stop offset="100%" stopColor="#e0e7ff" />
+            <stop offset="0%" stopColor="#0a0a0f" />
+            <stop offset="100%" stopColor="#1a1a2e" />
           </linearGradient>
         </defs>
         
-        {/* Rounded Icon Background with Indigo & Cyan Gradient */}
-        <rect width="100" height="100" rx="26" fill="url(#infinityBrandGrad)" />
+        {/* Dark Background with Gold Border */}
+        <rect width="100" height="100" rx="26" fill="url(#loopGrad)" />
         
-        {/* Glow inner border */}
-        <rect x="3" y="3" width="94" height="94" rx="23" stroke="white" strokeWidth="2" strokeOpacity="0.25" fill="none" />
+        {/* Subtle gold inner border */}
+        <rect x="3" y="3" width="94" height="94" rx="23" stroke="#f59e0b" strokeWidth="2" strokeOpacity="0.35" fill="none" />
         
-        {/* Stylized Sleek Infinity Loop Path */}
+        {/* Stylized Sleek Infinity Loop Path — Gold */}
         <path 
           d="M32 50 C20 32, 10 68, 32 68 C44 68, 56 32, 68 32 C90 32, 80 68, 68 68 C56 68, 44 32, 32 32 C10 32, 20 68, 32 50 Z" 
-          stroke="url(#loopGrad)" 
+          stroke="url(#infinityBrandGrad)" 
           strokeWidth="9" 
           strokeLinecap="round" 
           strokeLinejoin="round" 
         />
         
         {/* Sparkle Accent Dot */}
-        <circle cx="50" cy="50" r="4.5" fill="#f59e0b" />
+        <circle cx="50" cy="50" r="4.5" fill="#06b6d4" />
       </svg>
 
       {/* Infinity Store Typography */}
       <div className="flex flex-col justify-center leading-none">
-        <span className="font-['Outfit'] font-black text-xl sm:text-2xl tracking-tight bg-gradient-to-r from-[#4f46e5] via-[#7c3aed] to-[#06b6d4] bg-clip-text text-transparent">
+        <span className="font-['Outfit'] font-black text-xl sm:text-2xl tracking-tight bg-gradient-to-r from-amber-400 via-amber-500 to-cyan-400 bg-clip-text text-transparent">
           Infinity
         </span>
-        <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-800 -mt-0.5 flex items-center gap-1">
-          Store <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+        <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 -mt-0.5 flex items-center gap-1">
+          Store <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block"></span>
         </span>
       </div>
     </div>
@@ -58,3 +58,4 @@ export const InfinityLogo = ({ className = "h-9", onClick }) => {
 };
 
 export default InfinityLogo;
+
