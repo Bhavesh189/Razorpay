@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { allProducts, searchProductsLocally, productsById } from '../data/products/index.js';
+
 import { ProductSearchEngine } from '../search/SearchEngine.js';
 import { redisService } from './redisService.js';
 import dotenv from 'dotenv';
@@ -19,7 +19,7 @@ export function setSearchEngine(engine) {
 
 export function getSearchEngine() {
   if (!globalSearchEngine) {
-    globalSearchEngine = new ProductSearchEngine(allProducts);
+    globalSearchEngine = new ProductSearchEngine([]);
   }
   return globalSearchEngine;
 }
@@ -1999,7 +1999,7 @@ export async function processAIAgentRequirements({
   };
 
   // Retrieve matching products via structured catalog search
-  const matched = searchProductsLocally({
+  const matchedObj = getSearchEngine().search({
     category: normalizedCategory,
     priorities,
     requirements: priorities,
@@ -2008,6 +2008,7 @@ export async function processAIAgentRequirements({
     isBudgetActive,
     query: queryComposite
   });
+  const matched = matchedObj.products || [];
 
   const candidatePool = matched.slice(0, 30);
   const topProducts = candidatePool.slice(0, 5);
@@ -2027,7 +2028,7 @@ export async function processAIAgentRequirements({
       let finalProducts = [];
       if (Array.isArray(geminiResult.recommendations) && geminiResult.recommendations.length > 0) {
         for (const rec of geminiResult.recommendations) {
-          const p = productsById[rec.productId];
+          const p = getSearchEngine().products.find(prod => prod.id === rec.productId || (prod._id && prod._id.toString() === rec.productId));
           if (p && !finalProducts.some(existing => existing.id === p.id)) {
             if (isBudgetActive && budget && p.price > budget) continue;
             finalProducts.push({
@@ -2309,12 +2310,13 @@ export async function processAIAgentQuery(userQuery, conversationHistory = [], c
     stateAnalysis.shouldSearchProducts = false;
     candidateProducts = [];
   } else if (stateAnalysis.state === ConversationState.REQUIREMENTS_COMPLETE || stateAnalysis.shouldSearchProducts) {
-    const rawMatches = searchProductsLocally({
+    const rawMatchesObj = getSearchEngine().search({
       category: stateAnalysis.category || (image ? "all" : "laptops"),
       query: userQuery,
       budget: detectedReqs.numericBudget,
       isBudgetActive: Boolean(detectedReqs.numericBudget)
     });
+    const rawMatches = rawMatchesObj.products || [];
     candidateProducts = rawMatches.slice(0, 5);
   }
 
@@ -2350,7 +2352,7 @@ export async function processAIAgentQuery(userQuery, conversationHistory = [], c
       if (shouldShow) {
         if (Array.isArray(geminiResult.recommendations) && geminiResult.recommendations.length > 0) {
           for (const rec of geminiResult.recommendations) {
-            const p = productsById[rec.productId];
+            const p = getSearchEngine().products.find(prod => prod.id === rec.productId || (prod._id && prod._id.toString() === rec.productId));
             if (p && !finalProducts.some(existing => existing.id === p.id)) {
               if (detectedReqs.isBudgetActive && detectedReqs.numericBudget && p.price > detectedReqs.numericBudget) continue;
               finalProducts.push({
