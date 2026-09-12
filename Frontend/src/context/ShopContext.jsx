@@ -182,18 +182,69 @@ export const ShopProvider = ({ children }) => {
   };
   const [aiMessages, setAiMessages] = useState([defaultAiWelcomeMessage]);
 
-  // Sync to LocalStorage
+  // Sync to Cloud
+  const syncToCloud = useCallback(async (newCart, newWishlist) => {
+    if (!user.isLoggedIn) return;
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      await fetch(`${API_URL}/user/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ cart: newCart, wishlist: newWishlist })
+      });
+    } catch (e) {
+      console.warn('Failed to sync to cloud', e);
+    }
+  }, [user.isLoggedIn]);
+
+  // Sync to LocalStorage & Cloud
   useEffect(() => {
     localStorage.setItem('infinity_cart', JSON.stringify(cart));
-  }, [cart]);
+    if (user.isLoggedIn) syncToCloud(cart, undefined);
+  }, [cart, user.isLoggedIn, syncToCloud]);
 
   useEffect(() => {
     localStorage.setItem('infinity_wishlist', JSON.stringify(wishlist));
-  }, [wishlist]);
+    if (user.isLoggedIn) syncToCloud(undefined, wishlist);
+  }, [wishlist, user.isLoggedIn, syncToCloud]);
 
   useEffect(() => {
     localStorage.setItem('infinity_user', JSON.stringify(user));
   }, [user]);
+
+  // Fetch from cloud on mount if token exists
+  useEffect(() => {
+    const fetchCloudData = async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        
+        // Check if user is logged in via HTTP-only cookie
+        const meRes = await fetch(`${API_URL}/auth/me`, { credentials: 'include' });
+        const meData = await meRes.json();
+        
+        if (meRes.ok && meData.success) {
+          setUser({ isLoggedIn: true, phone: meData.user.phoneNumber, name: meData.user.name, id: meData.user._id });
+          if (meData.user.cart) setCart(meData.user.cart);
+          if (meData.user.wishlist) setWishlist(meData.user.wishlist);
+          
+          // Fetch orders
+          const ordRes = await fetch(`${API_URL}/user/orders`, { credentials: 'include' });
+          const ordData = await ordRes.json();
+          if (ordData.success) {
+            const mappedOrders = ordData.orders.map(o => ({ ...o, id: o.orderId || o._id }));
+            setOrders(mappedOrders);
+          }
+        } else if (meRes.status === 401) {
+          setUser({ isLoggedIn: false, phone: "", name: "" }); // Session expired
+        }
+      } catch(e) {
+        console.warn("Failed to fetch cloud data on mount", e);
+      }
+    };
+    
+    fetchCloudData();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('infinity_addresses', JSON.stringify(addresses));
@@ -349,10 +400,12 @@ export const ShopProvider = ({ children }) => {
   };
 
   // Place Order
-  const placeOrder = (paymentMethod, address) => {
-    const newOrderId = `INF-${Date.now().toString().slice(-6)}`;
+  const placeOrder = async (paymentMethod, address, overrideOrderId = null, paymentId = null) => {
+    const newOrderId = overrideOrderId || `INF-${Date.now().toString().slice(-6)}`;
     const newOrder = {
       id: newOrderId,
+      orderId: newOrderId,
+      paymentId: paymentId,
       items: [...cart],
       summary: { ...cartSummary },
       paymentMethod,
@@ -369,6 +422,20 @@ export const ShopProvider = ({ children }) => {
         { label: "Delivered", date: "Expected in 4 Days", done: false }
       ]
     };
+
+    if (user.isLoggedIn) {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        await fetch(`${API_URL}/user/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(newOrder)
+        });
+      } catch (e) {
+        console.warn('Failed to save order to cloud', e);
+      }
+    }
 
     setOrders(prev => [newOrder, ...prev]);
     clearCart();
@@ -414,6 +481,7 @@ export const ShopProvider = ({ children }) => {
         setFilters,
         resetFilters,
         cart,
+        setCart,
         addToCart,
         updateCartQuantity,
         removeFromCart,
@@ -423,6 +491,7 @@ export const ShopProvider = ({ children }) => {
         applyCouponCode,
         removeCoupon,
         wishlist,
+        setWishlist,
         toggleWishlist,
         isInWishlist,
         user,
@@ -433,6 +502,7 @@ export const ShopProvider = ({ children }) => {
         setSelectedAddressId,
         selectedAddress,
         orders,
+        setOrders,
         placeOrder,
         activeModal,
         setActiveModal,

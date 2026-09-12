@@ -3,7 +3,7 @@ import { useShop } from '../context/ShopContext';
 import { X, Smartphone, ShieldCheck, CheckCircle2, ArrowRight, Lock, User } from 'lucide-react';
 
 export const AuthModal = () => {
-  const { activeModal, setActiveModal, setUser, showToast } = useShop();
+  const { activeModal, setActiveModal, setUser, setCart, setWishlist, setOrders, showToast } = useShop();
 
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [step, setStep] = useState(1); // 1: Form, 2: OTP (only for signup)
@@ -47,11 +47,25 @@ export const AuthModal = () => {
       const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ phoneNumber: formData.phoneNumber, password: formData.password })
       });
       const data = await res.json();
       
       if (res.ok && data.success) {
+        if (data.user.cart) setCart(data.user.cart);
+        if (data.user.wishlist) setWishlist(data.user.wishlist);
+        
+        // Fetch Orders after login
+        try {
+          const ordRes = await fetch(`${API_URL}/user/orders`, { credentials: 'include' });
+          const ordData = await ordRes.json();
+          if (ordData.success) {
+            const mappedOrders = ordData.orders.map(o => ({ ...o, id: o.orderId || o._id }));
+            setOrders(mappedOrders);
+          }
+        } catch(e) { console.warn("Failed to fetch orders"); }
+
         setUser({ isLoggedIn: true, phone: data.user.phoneNumber, name: data.user.name, id: data.user._id });
         showToast("Logged in successfully! 🎉");
         setActiveModal(null);
@@ -84,6 +98,7 @@ export const AuthModal = () => {
       const res = await fetch(`${API_URL}/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ phoneNumber: formData.phoneNumber })
       });
       const data = await res.json();
@@ -117,6 +132,7 @@ export const AuthModal = () => {
       const verifyRes = await fetch(`${API_URL}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ phoneNumber: formData.phoneNumber, otp: enteredOtp })
       });
       const verifyData = await verifyRes.json();
@@ -131,11 +147,16 @@ export const AuthModal = () => {
       const signupRes = await fetch(`${API_URL}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(formData)
       });
       const signupData = await signupRes.json();
 
       if (signupRes.ok && signupData.success) {
+        if (signupData.user.cart) setCart(signupData.user.cart);
+        if (signupData.user.wishlist) setWishlist(signupData.user.wishlist);
+        setOrders([]); // Fresh user has no orders
+
         setUser({ isLoggedIn: true, phone: signupData.user.phoneNumber, name: signupData.user.name, id: signupData.user._id });
         showToast("Account created successfully! Welcome 🎉");
         setActiveModal(null);

@@ -32,7 +32,15 @@ const userSchema = new mongoose.Schema({
   },
   lastLoginAt: {
     type: Date,
-  }
+  },
+  cart: [{
+    productId: { type: String, required: true },
+    quantity: { type: Number, default: 1 },
+    size: { type: String }
+  }],
+  wishlist: [{
+    type: String // array of product IDs
+  }]
 }, { timestamps: true });
 
 export const User = mongoose.model('User', userSchema);

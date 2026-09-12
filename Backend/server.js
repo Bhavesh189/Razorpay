@@ -14,7 +14,7 @@ import productRoutes from './src/routes/productRoutes.js';
 
 // Legacy AI/Search/Payment imports
 import { ProductSearchEngine } from './search/SearchEngine.js';
-import { processAIAgentQuery, processAIAgentRequirements, streamAIAgentQuery } from './services/aiService.js';
+import { processAIAgentQuery, processAIAgentRequirements, streamAIAgentQuery, setSearchEngine } from './services/aiService.js';
 import { createRazorpayOrder, verifyRazorpayPayment, getRazorpayKeyId, processRazorpayWebhook, recordFrontendPaymentVerification, PaymentState } from './services/paymentService.js';
 import { searchProducts } from './services/productSearchService.js';
 import { redisService } from './services/redisService.js';
@@ -67,6 +67,7 @@ mongoose.connection.once('open', async () => {
     const productsFromDb = await Product.find({ isActive: true }).lean();
     searchEngine = new ProductSearchEngine(productsFromDb);
     app.locals.searchEngine = searchEngine;
+    setSearchEngine(searchEngine);
     console.log(`[AI Search Engine] Loaded ${productsFromDb.length} products from MongoDB into memory.`);
   } catch (error) {
     console.error('[AI Search Engine] Failed to load products for AI', error);
@@ -94,6 +95,7 @@ app.use((req, res, next) => {
 // 0. NEW MONGODB ROUTES
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/user', (await import('./src/routes/userRoutes.js')).default);
 
 // 1. Categories & Subcategories Hierarchy API (Legacy/Memory fallback if needed, but keeping it simple for frontend)
 app.get('/api/categories', (req, res) => {

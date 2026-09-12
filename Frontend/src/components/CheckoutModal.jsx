@@ -160,7 +160,7 @@ export const CheckoutModal = () => {
             });
 
             // Mark order as placed ONLY after Razorpay confirms payment
-            const placed = placeOrder(`Razorpay (${paymentId})`, selectedAddress);
+            const placed = await placeOrder(`Razorpay (${paymentId})`, selectedAddress, orderId, paymentId);
             setPlacedOrderData({
               ...placed,
               razorpayPaymentId: paymentId,
@@ -178,7 +178,7 @@ export const CheckoutModal = () => {
 
           } catch (err) {
             console.error("Order verification error:", err);
-            const placed = placeOrder(`Razorpay (${paymentId})`, selectedAddress);
+            const placed = await placeOrder(`Razorpay (${paymentId})`, selectedAddress, orderId, paymentId);
             setPlacedOrderData(placed);
             setStep(3);
           } finally {
