@@ -10,12 +10,16 @@ export const MobileBottomNav = ({ onOpenCategories }) => {
     setActiveModal, 
     resetFilters, 
     setSelectedCategory,
-    selectedCategory 
+    selectedCategory,
+    currentRoute,
+    setCurrentRoute,
+    setCurrentAccountTab
   } = useShop();
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleHomeClick = () => {
+    setCurrentRoute('home');
     resetFilters();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -36,8 +40,8 @@ export const MobileBottomNav = ({ onOpenCategories }) => {
           onClick={handleHomeClick}
           className="flex flex-col items-center justify-center p-1 text-slate-700 active:scale-95 transition-all group"
         >
-          <Home className={`w-5 h-5 ${selectedCategory === "all" ? "text-indigo-600" : "text-slate-500"}`} />
-          <span className={`text-[10px] font-medium mt-0.5 ${selectedCategory === "all" ? "text-indigo-600 font-bold" : "text-slate-600"}`}>
+          <Home className={`w-5 h-5 ${currentRoute === 'home' && selectedCategory === "all" ? "text-indigo-600" : "text-slate-500"}`} />
+          <span className={`text-[10px] font-medium mt-0.5 ${currentRoute === 'home' && selectedCategory === "all" ? "text-indigo-600 font-bold" : "text-slate-600"}`}>
             Home
           </span>
         </button>
@@ -68,11 +72,15 @@ export const MobileBottomNav = ({ onOpenCategories }) => {
 
         {/* 4. Wishlist */}
         <button
-          onClick={() => setActiveModal('wishlist')}
+          onClick={() => {
+            setCurrentRoute('account');
+            setCurrentAccountTab('wishlist');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
           className="flex flex-col items-center justify-center p-1 text-slate-700 active:scale-95 transition-all relative"
         >
           <div className="relative">
-            <Heart className={`w-5 h-5 ${wishlist.length > 0 ? "text-rose-500 fill-rose-500" : "text-slate-500"}`} />
+            <Heart className={`w-5 h-5 ${currentRoute === 'account' && wishlist.length > 0 ? "text-rose-500 fill-rose-500" : (wishlist.length > 0 ? "text-rose-500 fill-rose-500" : "text-slate-500")}`} />
             {wishlist.length > 0 && (
               <span className="absolute -top-1 -right-2 bg-indigo-600 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center">
                 {wishlist.length}
@@ -88,15 +96,17 @@ export const MobileBottomNav = ({ onOpenCategories }) => {
         <button
           onClick={() => {
             if (user.isLoggedIn) {
-              setActiveModal('orderTracking');
+              setCurrentRoute('account');
+              setCurrentAccountTab('orders');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
               setActiveModal('auth');
             }
           }}
           className="flex flex-col items-center justify-center p-1 text-slate-700 active:scale-95 transition-all relative"
         >
-          <User className="w-5 h-5 text-slate-500" />
-          <span className="text-[10px] font-medium mt-0.5 text-slate-600">
+          <User className={`w-5 h-5 ${currentRoute === 'account' ? 'text-indigo-600' : 'text-slate-500'}`} />
+          <span className={`text-[10px] font-medium mt-0.5 ${currentRoute === 'account' ? 'text-indigo-600 font-bold' : 'text-slate-600'}`}>
             {user.isLoggedIn ? "Account" : "Sign In"}
           </span>
         </button>

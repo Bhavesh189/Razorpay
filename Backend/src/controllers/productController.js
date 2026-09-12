@@ -13,8 +13,25 @@ export const getProducts = async (req, res) => {
       priceRange = 'all'
     } = req.query;
 
-    const queryObj = { isActive: true };
     const searchQuery = (search || q).toString().trim();
+    const pageNum = Math.max(1, parseInt(page, 10));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+
+    // Use High-Performance Memory Search Engine if available (handles typos, ranking, etc.)
+    if (req.app.locals.searchEngine) {
+      const searchRes = req.app.locals.searchEngine.search({
+        ...req.query,
+        query: searchQuery,
+        page: pageNum,
+        limit: limitNum
+      });
+      console.log('Search Res Products length:', searchRes.products.length);
+      console.log('Did you mean:', searchRes.didYouMean);
+      return res.status(200).json(searchRes);
+    }
+
+    // Fallback to MongoDB if Search Engine isn't loaded yet
+    const queryObj = { isActive: true };
 
     // Text Search
     if (searchQuery) {
@@ -59,8 +76,6 @@ export const getProducts = async (req, res) => {
     else if (sortBy === 'discount') sortObj.discount = -1;
     else sortObj.createdAt = -1; // Default relevance / newest
 
-    const pageNum = Math.max(1, parseInt(page, 10));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
     const skip = (pageNum - 1) * limitNum;
 
     const [products, total] = await Promise.all([

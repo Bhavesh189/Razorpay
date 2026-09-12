@@ -1,73 +1,158 @@
 import React, { useState } from 'react';
 import { useShop } from '../context/ShopContext';
-import { X, Smartphone, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
-import { InfinityLogo } from './InfinityLogo';
+import { X, Smartphone, ShieldCheck, CheckCircle2, ArrowRight, Lock, User } from 'lucide-react';
 
 export const AuthModal = () => {
-  const { activeModal, setActiveModal, user, setUser, showToast } = useShop();
+  const { activeModal, setActiveModal, setUser, showToast } = useShop();
 
-  const [step, setStep] = useState(1); // 1: Enter Phone, 2: Enter OTP
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [userName, setUserName] = useState("");
+  const [mode, setMode] = useState('login'); // 'login' | 'signup'
+  const [step, setStep] = useState(1); // 1: Form, 2: OTP (only for signup)
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    phoneNumber: '',
+    password: ''
+  });
+  
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [generatedOtp, setGeneratedOtp] = useState("123456");
-  const [otpError, setOtpError] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   if (activeModal !== 'auth') return null;
 
-  const handleSendOtp = (e) => {
-    e.preventDefault();
-    if (phoneNumber.length !== 10) {
-      alert("Please enter a valid 10-digit mobile number");
-      return;
-    }
-    const mockOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(mockOtp);
-    setStep(2);
-    showToast(`Your Infinity Store OTP is: ${mockOtp}`);
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError("");
   };
 
   const handleOtpChange = (index, value) => {
-    if (value.length > 1) {
-      value = value[value.length - 1];
-    }
+    if (value.length > 1) value = value[value.length - 1];
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
 
-    // Auto-focus next input
     if (value && index < 5) {
-      const nextInput = document.getElementById(`otp-${index + 1}`);
-      nextInput?.focus();
+      document.getElementById(`otp-${index + 1}`)?.focus();
     }
   };
 
-  const handleVerifyOtp = (e) => {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: formData.phoneNumber, password: formData.password })
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setUser({ isLoggedIn: true, phone: data.user.phoneNumber, name: data.user.name, id: data.user._id });
+        showToast("Logged in successfully! 🎉");
+        setActiveModal(null);
+      } else {
+        setError(data.message || "Login failed");
+      }
+    } catch (err) {
+      setError("Server connection error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignupInit = async (e) => {
+    e.preventDefault();
+    if (formData.phoneNumber.length !== 10) {
+      setError("Please enter a valid 10-digit mobile number");
+      return;
+    }
+    if (formData.password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      // 1. Send OTP
+      const res = await fetch(`${API_URL}/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: formData.phoneNumber })
+      });
+      const data = await res.json();
+      
+      if (res.ok && data.success) {
+        setStep(2);
+        showToast(data._mockOtp ? `Mock OTP: ${data._mockOtp}` : "OTP sent to your phone");
+      } else {
+        setError(data.message || "Failed to send OTP");
+      }
+    } catch (err) {
+      setError("Server connection error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyAndSignup = async (e) => {
     e.preventDefault();
     const enteredOtp = otp.join("");
-    if (enteredOtp === generatedOtp || enteredOtp === "123456") {
-      setUser({
-        isLoggedIn: true,
-        phone: phoneNumber,
-        name: userName || "Bhavesh Sharma"
-      });
-      showToast("Logged in successfully! Welcome to Infinity Store 🎉");
-      setActiveModal(null);
-    } else {
-      setOtpError("Incorrect OTP. Please enter the valid 6-digit code.");
+    if (enteredOtp.length !== 6) {
+      setError("Please enter the 6-digit OTP");
+      return;
     }
-  };
 
-  const autoFillOtp = () => {
-    const digits = generatedOtp.split("");
-    setOtp(digits);
+    setLoading(true);
+    setError("");
+
+    try {
+      // 2. Verify OTP
+      const verifyRes = await fetch(`${API_URL}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: formData.phoneNumber, otp: enteredOtp })
+      });
+      const verifyData = await verifyRes.json();
+
+      if (!verifyRes.ok || !verifyData.success) {
+        setError(verifyData.message || "Invalid OTP");
+        setLoading(false);
+        return;
+      }
+
+      // 3. Signup
+      const signupRes = await fetch(`${API_URL}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      const signupData = await signupRes.json();
+
+      if (signupRes.ok && signupData.success) {
+        setUser({ isLoggedIn: true, phone: signupData.user.phoneNumber, name: signupData.user.name, id: signupData.user._id });
+        showToast("Account created successfully! Welcome 🎉");
+        setActiveModal(null);
+      } else {
+        setError(signupData.message || "Signup failed");
+      }
+    } catch (err) {
+      setError("Server connection error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-100 relative my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl w-full max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto overflow-hidden shadow-2xl border border-slate-100 relative my-auto">
         
-        {/* Close Button */}
         <button
           onClick={() => setActiveModal(null)}
           className="absolute top-4 right-4 z-10 p-1.5 rounded-full text-white/80 hover:text-white hover:bg-white/20 transition-colors cursor-pointer"
@@ -75,88 +160,95 @@ export const AuthModal = () => {
           <X className="w-5 h-5" />
         </button>
 
-        {/* Hero Top graphic */}
         <div className="bg-gradient-to-r from-[#4338ca] via-[#4f46e5] to-[#7c3aed] p-6 text-white text-center space-y-2">
           <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mx-auto backdrop-blur-md shadow-inner border border-white/20">
-            <Smartphone className="w-6 h-6 text-white" />
+            {step === 2 ? <Smartphone className="w-6 h-6 text-white" /> : <User className="w-6 h-6 text-white" />}
           </div>
           <h3 className="text-xl font-black font-['Outfit']">
-            {step === 1 ? "Instant Guest Profile" : "Verify Mobile Number"}
+            {step === 2 ? "Verify Mobile Number" : (mode === 'login' ? "Welcome Back" : "Create Account")}
           </h3>
           <p className="text-xs text-indigo-100">
-            {step === 1 ? "Fast 1-Click Razorpay Checkout • No password or account needed" : `Verification code sent to +91 ${phoneNumber}`}
+            {step === 2 ? `Verification code sent to +91 ${formData.phoneNumber}` : "Login or signup to manage your orders & wishlist"}
           </p>
         </div>
 
-        {/* Body Content */}
         <div className="p-6 space-y-5">
-          
+          {error && <div className="p-3 bg-red-50 text-red-600 text-xs rounded-xl text-center font-semibold border border-red-100">{error}</div>}
+
           {step === 1 ? (
-            <form onSubmit={handleSendOtp} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Your Full Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter your name (optional)"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  className="w-full text-xs sm:text-sm border border-slate-300 rounded-2xl px-3.5 py-3 focus:outline-none focus:border-indigo-600"
-                />
-              </div>
+            <form onSubmit={mode === 'login' ? handleLogin : handleSignupInit} className="space-y-4">
+              
+              {mode === 'signup' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Full Name</label>
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    placeholder="Enter your name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    className="w-full text-xs sm:text-sm border border-slate-300 rounded-2xl px-3.5 py-3 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+              )}
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Mobile Number
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Mobile Number</label>
                 <div className="flex border border-slate-300 rounded-2xl overflow-hidden focus-within:border-indigo-600">
-                  <span className="bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3.5 py-3 flex items-center border-r border-slate-200">
-                    +91
-                  </span>
+                  <span className="bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3.5 py-3 flex items-center border-r border-slate-200">+91</span>
                   <input
                     type="tel"
+                    name="phoneNumber"
                     required
                     maxLength={10}
-                    placeholder="Enter 10 digit mobile number"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Enter 10 digit number"
+                    value={formData.phoneNumber}
+                    onChange={(e) => setFormData({...formData, phoneNumber: e.target.value.replace(/\D/g, '')})}
                     className="flex-1 text-xs sm:text-sm px-3.5 py-3 focus:outline-none font-medium"
                   />
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                By continuing, you agree to Infinity Store's <strong className="text-slate-700">Terms & Conditions</strong> and <strong className="text-slate-700">Privacy Policy</strong>.
-              </p>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Password</label>
+                <div className="flex border border-slate-300 rounded-2xl overflow-hidden focus-within:border-indigo-600 items-center px-3.5">
+                  <Lock className="w-4 h-4 text-slate-400 mr-2" />
+                  <input
+                    type="password"
+                    name="password"
+                    required
+                    placeholder="Enter password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="flex-1 text-xs sm:text-sm py-3 focus:outline-none font-medium"
+                  />
+                </div>
+              </div>
 
               <button
                 type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm py-3.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                disabled={loading}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm py-3.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 active:scale-95"
               >
-                <span>Continue & Send OTP</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>{loading ? "Processing..." : (mode === 'login' ? "Secure Login" : "Continue & Send OTP")}</span>
+                {!loading && <ArrowRight className="w-4 h-4" />}
               </button>
-            </form>
-          ) : (
-            /* Step 2: OTP Verification */
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              
-              <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-2xl flex items-center justify-between text-xs text-indigo-900">
-                <span>Mock OTP: <strong>{generatedOtp}</strong></span>
+
+              <div className="text-center pt-2">
                 <button
                   type="button"
-                  onClick={autoFillOtp}
-                  className="font-bold text-indigo-600 hover:underline"
+                  onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(""); }}
+                  className="text-xs text-indigo-600 font-semibold hover:underline"
                 >
-                  Auto-fill
+                  {mode === 'login' ? "New here? Create an account" : "Already have an account? Login"}
                 </button>
               </div>
-
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyAndSignup} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 text-center">
-                  Enter 6-Digit OTP
-                </label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 text-center">Enter 6-Digit OTP</label>
                 <div className="flex justify-center gap-2">
                   {otp.map((digit, idx) => (
                     <input
@@ -172,25 +264,17 @@ export const AuthModal = () => {
                 </div>
               </div>
 
-              {otpError && (
-                <p className="text-xs text-rose-500 text-center font-medium">{otpError}</p>
-              )}
-
               <button
                 type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm py-3.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                disabled={loading}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm py-3.5 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 active:scale-95"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Verify & Login</span>
+                {loading ? "Verifying..." : <><CheckCircle2 className="w-4 h-4" /><span>Verify & Create Account</span></>}
               </button>
 
               <div className="text-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="text-xs text-indigo-600 font-semibold hover:underline"
-                >
-                  Change Mobile Number
+                <button type="button" onClick={() => setStep(1)} className="text-xs text-indigo-600 font-semibold hover:underline">
+                  Back to Details
                 </button>
               </div>
             </form>
@@ -202,7 +286,6 @@ export const AuthModal = () => {
           </div>
 
         </div>
-
       </div>
     </div>
   );

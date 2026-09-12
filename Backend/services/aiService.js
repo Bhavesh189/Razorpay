@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-import { ProductSearchEngine } from '../search/SearchEngine.js';
+import { searchProducts, getRelatedProducts } from './productSearchService.js';
 import { redisService } from './redisService.js';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -78,12 +78,17 @@ export async function clearSessionState(sessionId) {
   }
 }
 
-// Initialize Gemini safely with sanitized key
+// Initialize Gemini safely
 const geminiApiKey = (process.env.GEMINI_API_KEY || process.env.AI_API_KEY || '').replace(/['"]/g, '').trim();
 let genAI = null;
-if (geminiApiKey && geminiApiKey !== 'your_api_key_here') {
+let generativeModel = null;
+if (geminiApiKey && geminiApiKey !== 'your_api_key_here' && geminiApiKey !== 'your_gemini_api_key_here') {
   try {
     genAI = new GoogleGenerativeAI(geminiApiKey);
+    generativeModel = genAI.getGenerativeModel({ 
+      model: "gemini-3.7-flash",
+      generationConfig: { responseMimeType: "application/json" }
+    });
   } catch (e) {
     console.warn('[Gemini] Initialization warning:', e.message);
   }
@@ -95,78 +100,56 @@ You speak naturally in friendly Hinglish, Hindi, or English (strictly matching t
 ## YOUR PERSONALITY & CORE PRINCIPLES:
 1. **Natural Conversation First**:
    - The AI must NOT behave like a search box all the time.
-   - If the user simply wants to chat ("Hello bhai", "Kya kar raha hai?", "Aaj college bahut tiring tha"):
+   - If the user simply wants to chat ("Hello bhai", "Kya kar raha hai?"):
      Respond naturally, casually, and warmly in the user's language.
-     Do NOT show products.
-     Do NOT start a questionnaire for normal conversation.
-     Do NOT randomly recommend products.
-     Classify intent as NORMAL_CONVERSATION.
 2. **Shopping Intent Detection**:
-   - When the user expresses a shopping intent ("Mujhe laptop chahiye", "I want a phone", "Gaming ke liye kuch chahiye", "Mujhe shoes lene hain", "Mujhe ek smartwatch buy karni hai"):
+   - When the user expresses a shopping intent ("Mujhe laptop chahiye", "I want a phone"):
      Do NOT immediately dump random products. First determine whether enough requirement information is available.
      If requirements are incomplete, initiate a dynamic requirement discovery flow.
 3. **Dynamic Category-Specific Questionnaire**:
    - Do NOT use hardcoded fixed questions. Dynamically generate the next most useful question for the category.
-   - For a laptop: usage (Gaming, Coding, Office, College, etc.), gaming performance level, RAM, display, budget, brand.
-   - Every question must support:
-     * Clear MCQ options
-     * "No Preference" where appropriate
-     * "Custom" option
-     * Dynamically decide whether single_select or multi_select
-   - Variable question depth: simple products require only 2-3 questions; complex tech may require 4-8 questions.
-   - When user says "product confirm hai" / "bas ab products dikhao" / "requirements complete", finalize requirements and retrieve products.
-4. **Deterministic Search & Candidate-Based Ranking**:
-   - When requirements are complete, products are retrieved from the 125,000+ catalog using the Infinity Search Engine.
-   - Evaluate candidate products against user hard constraints (budget maximum, RAM, brand) and soft preferences.
-   - Rank top 3 to 6 best matching products.
-   - You can ONLY recommend products present in the candidate product list. NEVER invent products, prices, specs, ratings, or IDs.
-   - Provide concise, user-facing explanations with medals (🥇 Best overall match, 🥈 Best performance option, 🥉 Best value option).
-5. **Zero Match Handling**:
-   - If no candidate satisfies hard constraints, honestly state so and offer options (relax budget, adjust specs).
-6. **Follow-Up Refinement & Contextual References**:
-   - Understand "Under 70k", "Only HP", "Second one kaisa hai", "first one ka alternative" using active result context.
-7. **Shopping Scope Guard**:
-   - If user asks for non-shopping tasks (coding, homework, medical, legal), politely redirect to shopping in their language.
-8. **Language Matching**:
-   - Match the user's language (English, Hindi, Hinglish) for conversations while keeping UI labels clean.
+   - Every question must support dynamic MCQ options.
+   - The LAST option MUST always be "Custom Input" (or equivalent in user's language).
+4. **Structured Requirements Extraction**:
+   - Always maintain and update the structured requirement object.
+   - Include category, budget, specs (RAM, GPU, brand, size, etc.) dynamically based on the category.
+5. **Requirements Complete**:
+   - Provide an is_complete boolean and a confidence score (0-1).
+   - If is_complete is true, set shouldSearchProducts to true and stop asking questions.
+   - Gemini must NEVER invent products, prices, images, ratings, stock, or IDs. Only rely on candidate products provided by the backend if they are provided in context, otherwise the backend will perform the search using your requirements.
 
 ## JSON RESPONSE FORMAT (Always return strict JSON):
 {
   "message": "Your natural markdown response in user's language without predefined templates",
   "language": "hinglish" | "english" | "hindi",
-  "intent": "NORMAL_CONVERSATION" | "SHOPPING_INTENT" | "REQUIREMENT_DISCOVERY" | "PRODUCT_RECOMMENDATION" | "FOLLOW_UP_REFINEMENT" | "SCOPE_GUARD" | "CART_ACTION",
-  "state": "GREETING" | "DISCOVERING_INTENT" | "COLLECTING_REQUIREMENTS" | "REQUIREMENTS_COMPLETE" | "CART_ACTION" | "NON_COMMERCE" | "UNCLEAR",
-  "category": "laptops" | "phones" | "headphones" | "fashion" | "footwear" | "fitness" | "appliances" | "watches" | "fragrances" | "bags" | null,
-  "requirementsComplete": boolean,
+  "intent": "product_discovery" | "product_recommendation" | "normal_conversation",
+  "category": "laptop" | "phone" | "headphones" | null,
+  "is_complete": boolean,
+  "confidence": number,
   "shouldSearchProducts": boolean,
+  "requirements": {
+    "category": string,
+    "budgetMax": number,
+    "ram": string,
+    "brand": string,
+    "purpose": string,
+    "...any_other_category_specific_fields": "value"
+  },
   "questionnaire": {
     "id": "question_identifier_string",
     "title": "Category-specific question title",
     "text": "Detailed question text",
     "type": "single_select" | "multi_select",
-    "options": ["Option 1", "Option 2", "Option 3", "No Preference", "Custom"],
-    "allowCustom": true,
+    "options": [
+      { "id": "opt-1", "label": "Gaming", "value": "Gaming" },
+      { "id": "opt-last", "label": "Custom Input", "value": "Custom Input" }
+    ],
     "customPlaceholder": "Tell me your requirement (e.g. minimum 24GB RAM for Docker)..."
   } | null,
-  "requirements": {
-    "priorities": ["priority1", "priority2"],
-    "budget": number | null,
-    "customRequirements": string
-  },
-  "recommendedProductIds": ["prod-id-1", "prod-id-2"],
-  "recommendations": [
-    {
-      "productId": "prod-id-1",
-      "matchRank": 1,
-      "whyMatches": "Concise user-facing explanation why it fits their requirement",
-      "keyHighlight": "Best Overall Match"
-    }
-  ],
   "agentAction": {
     "type": "REMOVE_FROM_CART" | "SHOW_CART" | "INITIATE_CHECKOUT",
     "target": "item keyword or all"
-  } | null,
-  "suggestedFollowUpQueries": ["Option 1", "Option 2", "Option 3", "Option 4"]
+  } | null
 }`;
 
 // Guard against non-commerce queries (coding, homework, entertainment, general knowledge)
@@ -2256,119 +2239,147 @@ Analyze the user message, context package, and candidate inventory. ${image ? "A
     }
   }
 
-  const modelCandidates = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+    if (genAI) {
+      const modelsToTry = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-computer-use-preview-10-2025", "antigravity-preview-05-2026"];
+      let lastError = null;
 
-  for (const modelName of modelCandidates) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ parts: promptParts }],
-          generationConfig: {
-            response_mime_type: "application/json"
+      for (const modelName of modelsToTry) {
+        try {
+          const generativeModel = genAI.getGenerativeModel({ 
+            model: modelName,
+            generationConfig: { responseMimeType: "application/json" }
+          });
+          
+          promptParts.unshift({ text: `SYSTEM INSTRUCTION: ${systemInstruction}\n\n` });
+          const result = await generativeModel.generateContent(promptParts);
+          const responseText = result.response.text();
+          
+          if (responseText) {
+            const jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/) || responseText.match(/```\s*([\s\S]*?)```/);
+            const jsonStr = jsonMatch ? jsonMatch[1].trim() : responseText.trim();
+            return JSON.parse(jsonStr);
           }
-        }),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) {
-        const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) || text.match(/```\s*([\s\S]*?)```/);
-        const jsonStr = jsonMatch ? jsonMatch[1].trim() : text.trim();
-        return JSON.parse(jsonStr);
+        } catch (e) {
+          lastError = e;
+          console.warn(`[Gemini] SDK call failed for ${modelName}:`, e.message);
+          if (e.message.includes('503 Service Unavailable') || e.message.includes('529')) {
+             // promptParts already unshifted, need to remove it so next iteration doesn't duplicate
+             promptParts.shift();
+             continue; // try next model
+          }
+          break; // if it's 400 Bad Request or something else, break
+        }
       }
-    } catch (e) {
-      console.warn(`[Gemini] ${modelName} call failed:`, e.message);
+      if (lastError) {
+         import('fs').then(fs => fs.writeFileSync('gemini_error.txt', lastError.stack + '\n' + lastError.message));
+      }
     }
-  }
 
   return null;
 }
 
-// Main AI Agent Query Processing Function
-export async function processAIAgentQuery(userQuery, conversationHistory = [], cartContext = [], userProfile = {}, image = null) {
-  const stateAnalysis = analyzeConversationState(userQuery, conversationHistory, cartContext, userProfile);
-  const detectedReqs = extractDetailedRequirements(userQuery, conversationHistory);
-  const impossibleBudget = checkImpossibleBudget(userQuery, detectedReqs.numericBudget);
+async function rankProductsWithGemini(userQuery, requirements, products) {
+  if (!genAI || !products || products.length === 0) return products;
+  
+  // To save tokens, only send id, title, price, and key specs
+  const lightweightProducts = products.map(p => ({
+    _id: p._id ? p._id.toString() : p.id,
+    title: p.title,
+    price: p.price,
+    features: p.features ? p.features.slice(0, 3) : []
+  }));
 
-  // If user uploaded an image, treat it as direct product discovery/recommendation
-  if (image) {
-    stateAnalysis.state = ConversationState.REQUIREMENTS_COMPLETE;
-    stateAnalysis.requirementsComplete = true;
-    stateAnalysis.shouldSearchProducts = true;
+  const systemInstruction = `You are an elite AI Shopping Assistant picking the absolute best products. 
+You are given a user query and a list of candidate products.
+Your job is to act as Stage 2 AI Re-Ranking.
+1. Evaluate each product against the user's specific subtle needs.
+2. Select the TOP 3 absolute best matches from the list.
+3. Write a personalized 1-line justification for WHY each product was chosen for this specific user.
+
+Return ONLY a JSON array of objects with the following schema:
+[
+  {
+    "id": "product_id",
+    "justification": "1-line personalized reason why this is perfect for the user."
   }
+]`;
 
-  let candidateProducts = [];
-  if (impossibleBudget && impossibleBudget.isImpossible) {
-    stateAnalysis.state = ConversationState.COLLECTING_REQUIREMENTS;
-    stateAnalysis.requirementsComplete = false;
-    stateAnalysis.shouldSearchProducts = false;
-    candidateProducts = [];
-  } else if (stateAnalysis.state === ConversationState.REQUIREMENTS_COMPLETE || stateAnalysis.shouldSearchProducts) {
-    const rawMatchesObj = getSearchEngine().search({
-      category: stateAnalysis.category || (image ? "all" : "laptops"),
-      query: userQuery,
-      budget: detectedReqs.numericBudget,
-      isBudgetActive: Boolean(detectedReqs.numericBudget)
-    });
-    const rawMatches = rawMatchesObj.products || [];
-    candidateProducts = rawMatches.slice(0, 5);
-  }
+  const prompt = `USER QUERY: ${userQuery}\nREQUIREMENTS: ${JSON.stringify(requirements)}\nCANDIDATE PRODUCTS: ${JSON.stringify(lightweightProducts)}`;
+  const promptParts = [{ text: prompt }];
 
-  const contextPackage = buildContextPackage(
-    userQuery,
-    conversationHistory,
-    cartContext,
-    userProfile,
-    stateAnalysis,
-    detectedReqs
-  );
-  if (impossibleBudget && impossibleBudget.isImpossible) {
-    contextPackage.impossibleBudget = impossibleBudget;
-  }
-  if (image) {
-    contextPackage.hasUploadedImage = true;
-  }
+  const modelsToTry = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-computer-use-preview-10-2025", "antigravity-preview-05-2026"];
 
-  // 1. Invoke Gemini with Full Context Package & Image
-  if (genAI) {
-    const geminiResult = await callGeminiWithContext(contextPackage, candidateProducts, image);
-    if (geminiResult && geminiResult.message) {
-      const finalState = impossibleBudget?.isImpossible ? ConversationState.COLLECTING_REQUIREMENTS : (geminiResult.state || stateAnalysis.state);
-      const shouldShow = !impossibleBudget?.isImpossible && (geminiResult.shouldSearchProducts || finalState === ConversationState.REQUIREMENTS_COMPLETE) && candidateProducts.length > 0;
-
-      // If questionnaire needed for category
-      let questionnaire = geminiResult.questionnaire;
-      if (finalState === ConversationState.COLLECTING_REQUIREMENTS && !questionnaire && !impossibleBudget?.isImpossible) {
-        questionnaire = getInteractiveQuestionnaireForCategory(userQuery);
+  for (const modelName of modelsToTry) {
+    try {
+      const generativeModel = genAI.getGenerativeModel({ 
+        model: modelName,
+        generationConfig: { responseMimeType: "application/json" }
+      });
+      
+      const currentParts = [{ text: `SYSTEM INSTRUCTION: ${systemInstruction}\n\n` }, ...promptParts];
+      const result = await generativeModel.generateContent(currentParts);
+      const responseText = result.response.text();
+      
+      if (responseText) {
+        const jsonMatch = responseText.match(/```json\s*([\s\S]*?)```/) || responseText.match(/```\s*([\s\S]*?)```/);
+        const jsonStr = jsonMatch ? jsonMatch[1].trim() : responseText.trim();
+        const topPicks = JSON.parse(jsonStr);
+        
+        if (Array.isArray(topPicks) && topPicks.length > 0) {
+           const rankedProducts = topPicks.map(pick => {
+              const product = products.find(p => (p._id ? p._id.toString() : p.id) === pick.id);
+              if (product) {
+                 const pObj = typeof product.toObject === 'function' ? product.toObject() : { ...product };
+                 pObj.aiJustification = pick.justification;
+                 return pObj;
+              }
+              return null;
+           }).filter(Boolean);
+           return rankedProducts.length > 0 ? rankedProducts : products.slice(0, 3);
+        }
       }
+    } catch (e) {
+      if (e.message.includes('503 Service Unavailable') || e.message.includes('529')) {
+         continue; 
+      }
+      break; 
+    }
+  }
+  return products.slice(0, 3);
+}
+
+// Main AI Agent Query Processing Function
+export async function processAIAgentQuery(userQuery, conversationHistory = [], cartContext = [], userProfile = {}, image = null, sessionId = "default_session") {
+  
+  const contextPackage = {
+    userQuery,
+    conversationHistory: conversationHistory.slice(-5),
+    cartContext,
+    userProfile
+  };
+
+  // 1. Invoke Gemini for Intent & Requirement Extraction
+  if (genAI) {
+    const geminiResult = await callGeminiWithContext(contextPackage, [], image);
+    if (geminiResult && geminiResult.message) {
+      const finalState = geminiResult.is_complete ? "REQUIREMENTS_COMPLETE" : "COLLECTING_REQUIREMENTS";
+      const shouldSearchProducts = geminiResult.shouldSearchProducts || (geminiResult.confidence && geminiResult.confidence > 0.85);
 
       let finalProducts = [];
-      if (shouldShow) {
-        if (Array.isArray(geminiResult.recommendations) && geminiResult.recommendations.length > 0) {
-          for (const rec of geminiResult.recommendations) {
-            const p = getSearchEngine().products.find(prod => prod.id === rec.productId || (prod._id && prod._id.toString() === rec.productId));
-            if (p && !finalProducts.some(existing => existing.id === p.id)) {
-              if (detectedReqs.isBudgetActive && detectedReqs.numericBudget && p.price > detectedReqs.numericBudget) continue;
-              finalProducts.push({
-                ...p,
-                matchRank: rec.matchRank || (finalProducts.length + 1),
-                whyItMatches: rec.whyMatches || `Matches your requirement for ${detectedReqs.intent || 'performance'}.`,
-                keyHighlight: rec.keyHighlight || (finalProducts.length === 0 ? "Best Overall Match 🥇" : "Top Recommendation")
-              });
-            }
-          }
-        }
-        if (finalProducts.length === 0) {
-          finalProducts = enrichProductsWithRequirementMatch(candidateProducts, detectedReqs, userQuery);
-        }
+      let relatedProducts = [];
+
+      // 2. Fetch Products from MongoDB if Requirements Sufficient
+      let searchRes = null;
+      if (shouldSearchProducts) {
+         searchRes = await searchProducts(geminiResult.requirements || {}, null, 30);
+         const candidateProducts = searchRes.products || [];
+         
+         if (candidateProducts.length > 0) {
+            // Stage 2: AI Re-Ranking (The Magic)
+            finalProducts = await rankProductsWithGemini(userQuery, geminiResult.requirements, candidateProducts);
+            relatedProducts = await getRelatedProducts(geminiResult.requirements?.category || geminiResult.category);
+         }
       }
-      const relatedProducts = finalProducts.length > 0 ? getRelatedProductsForCategory(userQuery, finalProducts) : [];
 
       let inChatCheckout = null;
       if (geminiResult.agentAction?.type === "SHOW_CART" || geminiResult.agentAction?.type === "INITIATE_CHECKOUT") {
@@ -2385,17 +2396,34 @@ export async function processAIAgentQuery(userQuery, conversationHistory = [], c
         reply: geminiResult.message,
         text: geminiResult.message,
         agentAction: geminiResult.agentAction || null,
-        questionnaire: questionnaire || null,
+        questionnaire: geminiResult.questionnaire || null,
+        requirements: geminiResult.requirements || {},
         products: finalProducts,
         relatedProducts: relatedProducts,
+        nextCursor: searchRes?.nextCursor || null,
+        hasMoreProducts: searchRes?.hasMore || false,
         inChatCheckout: inChatCheckout,
-        suggestedFollowUpQueries: geminiResult.suggestedFollowUpQueries || (questionnaire ? questionnaire.options.slice(0, 4).map(o => o.label || o.value) : ["Show My Cart 🛒", "Top Deals Today 🔥"])
+        suggestedFollowUpQueries: geminiResult.questionnaire ? geminiResult.questionnaire.options.slice(0, 4).map(o => o.label || o.value) : ["Show My Cart 🛒", "Top Deals Today 🔥"]
       };
     }
   }
 
-  // 2. Dynamic Fallback Generation (Used only if Gemini API is unreachable)
-  return generateDynamicFallback(userQuery, stateAnalysis, detectedReqs, candidateProducts, conversationHistory, cartContext, userProfile);
+  // Fallback if Gemini fails
+  return {
+    success: true,
+    state: "COLLECTING_REQUIREMENTS",
+    reply: "Sorry, abhi AI response mein problem aa rahi hai. Thodi der mein dobara try karo.",
+    text: "Sorry, abhi AI response mein problem aa rahi hai. Thodi der mein dobara try karo.",
+    agentAction: null,
+    questionnaire: null,
+    requirements: {},
+    products: [],
+    relatedProducts: [],
+    nextCursor: null,
+    hasMoreProducts: false,
+    inChatCheckout: null,
+    suggestedFollowUpQueries: ["Try Again"]
+  };
 }
 
 // Graceful dynamic fallback generator for network/API outages
@@ -2555,6 +2583,9 @@ export async function streamAIAgentQuery(userQuery, conversationHistory = [], ca
       products: result.products || [],
       relatedProducts: result.relatedProducts || [],
       questionnaire: result.questionnaire || null,
+      requirements: result.requirements || {},
+      nextCursor: result.nextCursor || null,
+      hasMoreProducts: result.hasMoreProducts || false,
       agentAction: result.agentAction || null,
       inChatCheckout: result.inChatCheckout || null,
       suggestedFollowUpQueries: result.suggestedFollowUpQueries || [],

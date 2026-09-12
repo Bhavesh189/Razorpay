@@ -11,7 +11,9 @@
     "test:pillars": "node test_production_pillars.js",
     "test:search": "node test_ecommerce_search_suite.js",
     "test:ai": "node test_ai_scenarios.js",
-    "test:catalog": "node test_full_catalog_verification.js"
+    "test:catalog": "node test_full_catalog_verification.js",
+    "seed:products": "node scripts/seedProducts.js",
+    "validate:images": "node scripts/validateImages.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

@@ -20,10 +20,11 @@ import { AIAssistantModal } from './components/AIAssistantModal';
 import { AIAssistantButton } from './components/AIAssistantButton';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { Footer } from './components/Footer';
+import { AccountDashboard } from './components/AccountDashboard';
 import { SlidersHorizontal, Sparkles, X } from 'lucide-react';
 
 const MainLayout = () => {
-  const { toastMessage, resetFilters, searchQuery } = useShop();
+  const { toastMessage, resetFilters, searchQuery, currentRoute } = useShop();
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isMobileCategoryDrawerOpen, setIsMobileCategoryDrawerOpen] = useState(false);
 
@@ -51,76 +52,82 @@ const MainLayout = () => {
 
       {/* Page Body */}
       <main className="flex-1 space-y-4 sm:space-y-6">
-        
-        {/* Home Page Sections - Only visible when NOT searching */}
-        {!isSearchActive && (
+        {currentRoute === 'home' && (
           <>
-            {/* Promotional Hero Carousel & Trust Pillars */}
-            <HeroBanner />
+            {/* Home Page Sections - Only visible when NOT searching */}
+            {!isSearchActive && (
+              <>
+                {/* Promotional Hero Carousel & Trust Pillars */}
+                <HeroBanner />
 
-            {/* Circular Category Avatars */}
-            <CategoryStories />
+                {/* Circular Category Avatars */}
+                <CategoryStories />
 
-            {/* Budget Deals Store & Supplier Highlight */}
-            <BudgetZone />
+                {/* Budget Deals Store & Supplier Highlight */}
+                <BudgetZone />
+              </>
+            )}
+
+            {/* Main Catalog & Filter Grid Section */}
+            <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 pt-2 sm:pt-4">
+              
+              {/* Mobile Filter Toggle Button */}
+              <div className="md:hidden mb-3">
+                <button
+                  onClick={() => setIsMobileFilterOpen(true)}
+                  className="w-full bg-white border border-slate-300 text-slate-800 text-xs font-bold py-3 px-4 rounded-2xl shadow-sm flex items-center justify-center gap-2 active:scale-98"
+                >
+                  <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
+                  <span>Filter & Sort Products</span>
+                </button>
+              </div>
+
+              <div className="flex flex-col md:flex-row gap-6 items-start w-full">
+                
+                {/* Desktop Left Filter Sidebar */}
+                <div className="hidden md:block w-64 lg:w-72 flex-shrink-0 sticky top-24">
+                  <FilterSidebar />
+                </div>
+
+                {/* Mobile Filter Drawer */}
+                {isMobileFilterOpen && (
+                  <div className="fixed inset-0 z-50 flex md:hidden bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="w-[85vw] max-w-sm bg-white h-full p-4 overflow-y-auto shadow-2xl flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200">
+                          <span className="font-bold text-sm text-slate-900 font-['Outfit']">Filters & Sorting</span>
+                          <button onClick={() => setIsMobileFilterOpen(false)} className="p-1 rounded-full text-slate-500 hover:bg-slate-100">
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                        <FilterSidebar />
+                      </div>
+                      <div className="pt-4 border-t border-slate-200 mt-4">
+                        <button
+                          onClick={() => setIsMobileFilterOpen(false)}
+                          className="w-full bg-indigo-600 text-white text-xs font-bold py-3 rounded-xl shadow-lg"
+                        >
+                          Apply Filters
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Right Product Grid */}
+                <div className="flex-1 w-full min-w-0">
+                  <ProductGrid />
+                </div>
+
+              </div>
+
+            </div>
           </>
         )}
 
-        {/* Main Catalog & Filter Grid Section */}
-        <div className="max-w-[1400px] mx-auto px-4 lg:px-8 pt-2 sm:pt-4">
-          
-          {/* Mobile Filter Toggle Button */}
-          <div className="md:hidden mb-3">
-            <button
-              onClick={() => setIsMobileFilterOpen(true)}
-              className="w-full bg-white border border-slate-300 text-slate-800 text-xs font-bold py-3 px-4 rounded-2xl shadow-sm flex items-center justify-center gap-2 active:scale-98"
-            >
-              <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
-              <span>Filter & Sort Products</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-            
-            {/* Desktop Left Filter Sidebar */}
-            <div className="hidden md:block md:col-span-4 lg:col-span-3 sticky top-24">
-              <FilterSidebar />
-            </div>
-
-            {/* Mobile Filter Drawer */}
-            {isMobileFilterOpen && (
-              <div className="fixed inset-0 z-50 flex md:hidden bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="w-4/5 max-w-sm bg-white h-full p-4 overflow-y-auto shadow-2xl flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200">
-                      <span className="font-bold text-sm text-slate-900 font-['Outfit']">Filters & Sorting</span>
-                      <button onClick={() => setIsMobileFilterOpen(false)} className="p-1 rounded-full text-slate-500 hover:bg-slate-100">
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                    <FilterSidebar />
-                  </div>
-                  <div className="pt-4 border-t border-slate-200 mt-4">
-                    <button
-                      onClick={() => setIsMobileFilterOpen(false)}
-                      className="w-full bg-indigo-600 text-white text-xs font-bold py-3 rounded-xl shadow-lg"
-                    >
-                      Apply Filters
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Right Product Grid */}
-            <div className="md:col-span-8 lg:col-span-9">
-              <ProductGrid />
-            </div>
-
-          </div>
-
-        </div>
-
+        {currentRoute === 'account' && (
+          <AccountDashboard />
+        )}
       </main>
 
       {/* Footer */}

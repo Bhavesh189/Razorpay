@@ -20,8 +20,8 @@ export const DownloadAppModal = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 relative my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl w-full max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto overflow-hidden shadow-2xl border border-slate-100 relative my-auto">
         
         {/* Close Button */}
         <button

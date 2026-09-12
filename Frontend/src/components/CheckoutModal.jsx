@@ -255,8 +255,10 @@ export const CheckoutModal = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-100 relative my-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl flex flex-col">
+        {/* Animated Top Gradient Bar */}
+        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500" />
         
         {/* Header with Stepper */}
         <div className="sticky top-0 bg-white border-b border-slate-200 p-4 sm:p-5 z-20 flex items-center justify-between">
@@ -503,19 +505,7 @@ export const CheckoutModal = () => {
                     </div>
                   </div>
 
-                  {/* Test Card Info Helper */}
-                  <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-3 text-xs space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-amber-900 font-extrabold text-[11px] uppercase tracking-wider">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                      Razorpay Test Mode Instructions
-                    </div>
-                    <div className="text-slate-700 text-xs leading-relaxed">
-                      • When the official Razorpay popup opens, select <strong>Card</strong> or <strong>UPI</strong>.<br />
-                      • <strong>Card Number</strong>: <code className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-bold text-slate-900 font-mono">5272 0088 0623 5704</code><br />
-                      • <strong>Expiry Date</strong>: Any future date (e.g. <code className="bg-white px-1 rounded border font-mono">12/28</code>) • <strong>CVV</strong>: <code className="bg-white px-1 rounded border font-mono">123</code><br />
-                      • <strong>OTP</strong>: Enter <code className="bg-white px-1 rounded border font-mono font-bold">123456</code> or click <strong>Success</strong> on the Razorpay screen.
-                    </div>
-                  </div>
+
 
                   {/* Supported Payment Channels */}
                   <div className="pt-2 border-t border-indigo-100 space-y-2">

@@ -78,8 +78,7 @@ export const requestOTP = async (req, res) => {
     // Note: Do NOT return the OTP in production. Only for local testing if env is dev
     res.status(200).json({
       success: true,
-      message: 'OTP sent successfully',
-      ...(process.env.NODE_ENV === 'development' && { _mockOtp: otpCode })
+      message: 'OTP sent successfully'
     });
 
   } catch (error) {

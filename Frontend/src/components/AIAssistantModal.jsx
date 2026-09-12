@@ -62,6 +62,41 @@ import {
 import { SafeImage } from './SafeImage';
 import confetti from 'canvas-confetti';
 
+// Helper component for infinite product scrolling
+export const InfiniteProductLoader = ({ requirements, cursor, onLoadMore, isLoading }) => {
+  const loaderRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoading && cursor) {
+          onLoadMore(cursor);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loaderRef.current) {
+      observer.observe(loaderRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [cursor, isLoading, onLoadMore]);
+
+  if (!cursor) return null;
+
+  return (
+    <div ref={loaderRef} className="w-full flex justify-center py-4">
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold animate-pulse">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Loading more products...</span>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 // Modern SVG Infinity Icon
 export const InfinityIcon = ({ className = "w-5 h-5 text-white" }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -159,7 +194,7 @@ const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
   const toggleOption = (val) => {
     if (isSubmitted) return;
 
-    if (val.toLowerCase() === "custom") {
+    if (val.toLowerCase().includes("custom") || val.toLowerCase() === "custom input") {
       customInputRef.current?.focus();
       return;
     }
@@ -238,7 +273,7 @@ const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
   const sliderPercentage = Math.min(100, Math.max(0, ((numericBudget - minBudget) / (maxBudget - minBudget)) * 100));
 
   return (
-    <div className="w-full max-w-2xl bg-white border border-indigo-100 rounded-3xl p-4 sm:p-5 space-y-4 shadow-[0_4px_20px_rgba(84,66,246,0.06)] ml-0 sm:ml-12 animate-in zoom-in-95">
+    <div className="w-full max-w-[95vw] sm:max-w-3xl md:max-w-4xl bg-white border border-indigo-100 rounded-3xl p-4 sm:p-5 space-y-4 shadow-[0_4px_20px_rgba(84,66,246,0.06)] ml-0 sm:ml-12 animate-in zoom-in-95">
 
       {/* Header Banner */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -808,7 +843,8 @@ export const AIAssistantModal = () => {
 
     try {
       // 1. Create order on backend
-      const res = await fetch('/api/payment/create-order', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${API_URL}/payment/create-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -858,7 +894,8 @@ export const AIAssistantModal = () => {
             const signature = response.razorpay_signature || '';
 
             // 3. Verify Payment on backend
-            await fetch('/api/payment/verify', {
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+            await fetch(`${API_URL}/payment/verify`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1131,7 +1168,8 @@ export const AIAssistantModal = () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 25000);
 
-      const streamRes = await fetch('/api/ai/chat/stream', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const streamRes = await fetch(`${API_URL}/ai/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1226,6 +1264,9 @@ export const AIAssistantModal = () => {
                   questionnaire: data.questionnaire !== undefined ? data.questionnaire : m.questionnaire,
                   inChatCheckout: data.inChatCheckout || m.inChatCheckout,
                   suggestedFollowUpQueries: data.suggestedFollowUpQueries || m.suggestedFollowUpQueries,
+                  requirements: data.requirements || m.requirements || {},
+                  nextCursor: data.nextCursor || m.nextCursor || null,
+                  hasMoreProducts: data.hasMoreProducts !== undefined ? data.hasMoreProducts : (m.hasMoreProducts || false),
                   isStreaming: false
                 } : m));
               } else if (eventType === 'error') {
@@ -1250,7 +1291,8 @@ export const AIAssistantModal = () => {
 
       // 2. Standard JSON Fallback
       try {
-        const res = await fetch('/api/ai/chat', {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const res = await fetch(`${API_URL}/ai/chat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1290,7 +1332,10 @@ export const AIAssistantModal = () => {
               upsellPitch: data.upsellPitch || null,
               inChatCheckout: data.inChatCheckout || null,
               campaign: data.campaign || null,
-              suggestedFollowUpQueries: data.suggestedFollowUpQueries || []
+              suggestedFollowUpQueries: data.suggestedFollowUpQueries || [],
+              requirements: data.requirements || {},
+              nextCursor: data.nextCursor || null,
+              hasMoreProducts: data.hasMoreProducts || false
             }
           ]);
         } else {
@@ -1303,7 +1348,7 @@ export const AIAssistantModal = () => {
           {
             id: `ai-err-${Date.now()}`,
             sender: "ai",
-            text: `I have processed your query! Here are our best recommendations from our **100,000+ catalog**:`,
+            text: `⚠️ **Connection Error:** ${fallbackErr.message || 'Unable to reach AI agent.'}`,
             products: [],
             upsellPitch: null,
             suggestedFollowUpQueries: ["Show My Cart 🛒", "Proceed to Checkout ⚡"]
@@ -1354,7 +1399,8 @@ export const AIAssistantModal = () => {
           text: typeof m.text === 'string' ? m.text : ''
         }));
 
-      const res = await fetch('/api/ai/requirements', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${API_URL}/ai/requirements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1391,7 +1437,10 @@ export const AIAssistantModal = () => {
             upsellPitch: data.upsellPitch || null,
             inChatCheckout: data.inChatCheckout || null,
             campaign: data.campaign || null,
-            suggestedFollowUpQueries: data.suggestedFollowUpQueries || []
+            suggestedFollowUpQueries: data.suggestedFollowUpQueries || [],
+            requirements: data.requirements || {},
+            nextCursor: data.nextCursor || null,
+            hasMoreProducts: data.hasMoreProducts || false
           }
         ]);
       } else {
@@ -2055,8 +2104,44 @@ export const AIAssistantModal = () => {
                           className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-indigo-50 text-indigo-700 border border-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-2xs cursor-pointer mt-1"
                         >
                           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                          <span>{isExpanded ? "Show Top 2 Matches Only ▴" : `✨ View ${msg.products.length - 2} More Matches ▾`}</span>
+                          <span>{isExpanded ? "Show Top 2 Matches Only ▴" : `✨ View All ${msg.products.length} Matches ▾`}</span>
                         </button>
+                      )}
+
+                      {isExpanded && msg.hasMoreProducts && (
+                        <InfiniteProductLoader 
+                          requirements={msg.requirements}
+                          cursor={msg.nextCursor}
+                          isLoading={msg.isLoadingMore}
+                          onLoadMore={async (cursor) => {
+                            try {
+                              setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isLoadingMore: true } : m));
+                              const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+                              const res = await fetch(`${API_URL}/products/recommendations`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ requirements: msg.requirements, cursor })
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                setMessages(prev => prev.map(m => {
+                                  if (m.id === msg.id) {
+                                    return { 
+                                      ...m, 
+                                      products: [...m.products, ...(data.products || [])], 
+                                      nextCursor: data.nextCursor, 
+                                      hasMoreProducts: data.hasMore,
+                                      isLoadingMore: false
+                                    };
+                                  }
+                                  return m;
+                                }));
+                              }
+                            } catch (e) {
+                              setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isLoadingMore: false } : m));
+                            }
+                          }}
+                        />
                       )}
                     </div>
                   );

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { rateLimit } from 'express-rate-limit';
+import mongoose from 'mongoose';
 
 import { connectDB } from './src/config/db.js';
 import authRoutes from './src/routes/authRoutes.js';
@@ -13,8 +14,9 @@ import productRoutes from './src/routes/productRoutes.js';
 
 // Legacy AI/Search/Payment imports
 import { ProductSearchEngine } from './search/SearchEngine.js';
-import { processAIAgentQuery, processAIAgentRequirements, setSearchEngine, streamAIAgentQuery } from './services/aiService.js';
+import { processAIAgentQuery, processAIAgentRequirements, streamAIAgentQuery } from './services/aiService.js';
 import { createRazorpayOrder, verifyRazorpayPayment, getRazorpayKeyId, processRazorpayWebhook, recordFrontendPaymentVerification, PaymentState } from './services/paymentService.js';
+import { searchProducts } from './services/productSearchService.js';
 import { redisService } from './services/redisService.js';
 
 import { Product } from './src/models/Product.js';
@@ -35,8 +37,10 @@ connectDB();
 app.use(helmet()); // Security Headers
 app.use(cookieParser());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
+  origin: function (origin, callback) {
+    callback(null, true);
+  },
+  credentials: true
 }));
 
 app.use(express.json({
@@ -62,7 +66,7 @@ mongoose.connection.once('open', async () => {
   try {
     const productsFromDb = await Product.find({ isActive: true }).lean();
     searchEngine = new ProductSearchEngine(productsFromDb);
-    setSearchEngine(searchEngine);
+    app.locals.searchEngine = searchEngine;
     console.log(`[AI Search Engine] Loaded ${productsFromDb.length} products from MongoDB into memory.`);
   } catch (error) {
     console.error('[AI Search Engine] Failed to load products for AI', error);
@@ -153,6 +157,17 @@ app.post('/api/ai/requirements', async (req, res) => {
     return res.json(result);
   } catch (error) {
     return res.status(500).json({ success: false, error: "Failed to process AI requirements", message: error.message });
+  }
+});
+
+app.post('/api/products/recommendations', async (req, res) => {
+  try {
+    const { requirements, cursor } = req.body;
+    if (!requirements) return res.status(400).json({ success: false, error: 'requirements required' });
+    const searchRes = await searchProducts(requirements, cursor, 30);
+    return res.json(searchRes);
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -249,3 +264,4 @@ const handleShutdown = async (signal) => {
 
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+// Trigger restart

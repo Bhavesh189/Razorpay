@@ -834,6 +834,10 @@ export class ProductSearchEngine {
       limit = 24
     } = opts;
 
+    const isInfinityMall = String(onlyInfinityMall) === 'true';
+    const parsedMinRating = Number(minRating) || 0;
+    const parsedMinDiscount = Number(minDiscount) || 0;
+
     // 1. Query Normalization & Intent Extraction
     const {
       cleanedQuery,
@@ -861,9 +865,11 @@ export class ProductSearchEngine {
         if (subCatFilterSet && !subCatFilterSet.has(i)) continue;
         if (genderFilterSet && !genderFilterSet.has(i) && this.products[i].gender !== "All") continue;
         if (priceFilterSet && !priceFilterSet.has(i)) continue;
-        if (onlyInfinityMall && !this.mallBucket.has(i)) continue;
+        if (isInfinityMall && !this.mallBucket.has(i)) continue;
         if (extractedMaxPrice && this.products[i].price > extractedMaxPrice) continue;
         if (extractedMinPrice && this.products[i].price < extractedMinPrice) continue;
+        if (parsedMinRating > 0 && this.products[i].rating < parsedMinRating) continue;
+        if (parsedMinDiscount > 0 && this.products[i].discount < parsedMinDiscount) continue;
         filtered.push(this.products[i]);
       }
 
@@ -1073,9 +1079,9 @@ export class ProductSearchEngine {
       if (subCatFilterSet && !subCatFilterSet.has(docIdx)) continue;
       if (genderFilterSet && !genderFilterSet.has(docIdx) && p.gender !== "All") continue;
       if (priceFilterSet && !priceFilterSet.has(docIdx)) continue;
-      if (onlyInfinityMall && !this.mallBucket.has(docIdx)) continue;
-      if (minRating > 0 && p.rating < minRating) continue;
-      if (minDiscount > 0 && p.discount < minDiscount) continue;
+      if (isInfinityMall && !this.mallBucket.has(docIdx)) continue;
+      if (parsedMinRating > 0 && p.rating < parsedMinRating) continue;
+      if (parsedMinDiscount > 0 && p.discount < parsedMinDiscount) continue;
       if (color !== "all" && !p.colors?.some(c => c.toLowerCase().includes(color.toLowerCase()))) continue;
       if (size !== "all" && !p.sizes?.includes(size)) continue;
 

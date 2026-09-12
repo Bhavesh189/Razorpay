@@ -31,7 +31,10 @@ export const Header = () => {
     products, 
     resetFilters,
     setSelectedCategory,
-    orders
+    orders,
+    currentRoute,
+    setCurrentRoute,
+    setCurrentAccountTab
   } = useShop();
 
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -68,7 +71,8 @@ export const Header = () => {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(searchQuery)}&limit=6`);
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const res = await fetch(`${API_URL}/search/suggest?q=${encodeURIComponent(searchQuery)}&limit=6`);
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
@@ -112,6 +116,12 @@ export const Header = () => {
 
   const totalCartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  const handleHomeClick = () => {
+    setCurrentRoute('home');
+    resetFilters();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSelectTrending = (tag) => {
     setSearchQuery(tag);
     setIsSearchFocused(false);
@@ -124,13 +134,13 @@ export const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-[#0a0a0f]/95 backdrop-blur-xl border-b border-white/5 shadow-lg shadow-black/20 transition-all">
-      <div className="max-w-[1400px] mx-auto px-4 lg:px-8">
-        <div className="flex items-center justify-between h-[72px] gap-3 md:gap-6">
+    <header className="sticky top-0 z-40 bg-[#0a0a0f]/95 backdrop-blur-xl border-b border-white/5 shadow-lg shadow-black/20 transition-all w-full">
+      <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-8">
+        <div className="flex flex-wrap items-center justify-between min-h-[72px] py-2 gap-3 md:gap-6">
           
           {/* 1. Left Logo */}
           <div className="flex items-center gap-4 flex-shrink-0">
-            <InfinityLogo onClick={resetFilters} />
+            <InfinityLogo onClick={handleHomeClick} />
           </div>
 
           {/* 2. Center Search Bar with Autocomplete Dropdown & Ask AI Button */}
@@ -312,7 +322,7 @@ export const Header = () => {
             <span className="hidden xl:inline-block w-px h-5 bg-[#1e1e2e]"></span>
 
             {/* Profile Dropdown */}
-            <div ref={profileRef} className="relative">
+            <div ref={profileRef} className="hidden md:block relative">
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                 className="flex flex-col items-center justify-center text-slate-400 hover:text-amber-400 transition-colors py-1 group px-1 cursor-pointer"
@@ -355,7 +365,8 @@ export const Header = () => {
                     <button
                       onClick={() => {
                         setIsProfileOpen(false);
-                        setActiveModal('orderTracking');
+                        setCurrentRoute('account');
+                        setCurrentAccountTab('orders');
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-amber-500/5 hover:text-amber-400 transition-colors text-left"
                     >
@@ -371,7 +382,8 @@ export const Header = () => {
                     <button
                       onClick={() => {
                         setIsProfileOpen(false);
-                        setActiveModal('wishlist');
+                        setCurrentRoute('account');
+                        setCurrentAccountTab('wishlist');
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-amber-500/5 hover:text-amber-400 transition-colors text-left"
                     >
@@ -398,7 +410,8 @@ export const Header = () => {
                     <button
                       onClick={() => {
                         setIsProfileOpen(false);
-                        setActiveModal('help');
+                        setCurrentRoute('account');
+                        setCurrentAccountTab('help');
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-amber-500/5 hover:text-amber-400 transition-colors text-left"
                     >
@@ -425,8 +438,11 @@ export const Header = () => {
 
             {/* Wishlist */}
             <button
-              onClick={() => setActiveModal('wishlist')}
-              className="relative flex flex-col items-center justify-center text-slate-400 hover:text-amber-400 transition-colors py-1 group px-1 cursor-pointer"
+              onClick={() => {
+                setCurrentRoute('account');
+                setCurrentAccountTab('wishlist');
+              }}
+              className="hidden md:flex relative flex-col items-center justify-center text-slate-400 hover:text-amber-400 transition-colors py-1 group px-1 cursor-pointer"
             >
               <div className="relative">
                 <Heart className={`w-5 h-5 group-hover:scale-110 transition-transform ${wishlist.length > 0 ? 'text-rose-500 fill-rose-500' : ''}`} />

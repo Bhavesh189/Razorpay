@@ -82,10 +82,16 @@ export const ProductGrid = () => {
         </div>
       )}
 
-      {/* 2. Products Grid (Responsive 2 cols on mobile, 3 on md, 4 on xl) */}
-      {filteredProducts.length > 0 ? (
+      {/* 2. Products Grid */}
+      {isProductsLoading && filteredProducts.length === 0 ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 sm:gap-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="aspect-[3/4] skeleton-shimmer rounded-2xl" />
+          ))}
+        </div>
+      ) : filteredProducts.length > 0 ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 sm:gap-4">
             {filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}

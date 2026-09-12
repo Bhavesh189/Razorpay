@@ -82,7 +82,7 @@ export const HeroBanner = () => {
             touchStartX.current = null;
           }}
           onClick={() => handleBannerClick(banner.categoryTarget)}
-          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${banner.bgGradient || 'from-[#4338ca] via-[#4f46e5] to-[#7c3aed]'} text-white shadow-xl min-h-[540px] max-[380px]:min-h-[570px] sm:min-h-[440px] md:min-h-[420px] flex items-center transition-all duration-500 cursor-pointer group select-none`}
+          className={`relative overflow-hidden rounded-3xl bg-gradient-to-r ${banner.bgGradient || 'from-[#4338ca] via-[#4f46e5] to-[#7c3aed]'} text-white shadow-xl min-h-[540px] max-[380px]:min-h-[570px] sm:min-h-[440px] md:min-h-[420px] flex items-center transition-all duration-500 cursor-pointer group select-none border border-white/20`}
         >
           
           {/* Subtle Background Pattern */}

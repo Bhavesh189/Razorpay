@@ -1,22 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { productsData } from '../data/products';
 import { couponsData } from '../data/coupons';
 
 const ShopContext = createContext();
 
 export const ShopProvider = ({ children }) => {
   // Live products loaded from 10,000+ Backend Catalog
-  const [products, setProducts] = useState(productsData);
+  const [products, setProducts] = useState([]);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalCatalogCount, setTotalCatalogCount] = useState(productsData.length);
+  const [totalCatalogCount, setTotalCatalogCount] = useState(0);
 
   // Search & Navigation
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("home"); // 'home' | 'mall' | 'supplier'
+  const [currentRoute, setCurrentRoute] = useState('home'); // 'home' | 'account'
+  const [currentAccountTab, setCurrentAccountTab] = useState('orders'); // 'orders' | 'wishlist' | 'help' | 'faq'
 
   // Filters
   const [filters, setFilters] = useState({
@@ -52,7 +53,8 @@ export const ShopProvider = ({ children }) => {
         onlyInfinityMall: filters.onlyInfinityMall ? "true" : "false"
       });
 
-      const res = await fetch(`/api/products?${params.toString()}`);
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${API_URL}/products?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.products) {
@@ -404,6 +406,10 @@ export const ShopProvider = ({ children }) => {
         setSearchDidYouMean,
         activeTab,
         setActiveTab,
+        currentRoute,
+        setCurrentRoute,
+        currentAccountTab,
+        setCurrentAccountTab,
         filters,
         setFilters,
         resetFilters,
