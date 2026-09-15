@@ -3,7 +3,7 @@ import { storyCategories } from '../data/categories';
 import { useShop } from '../context/ShopContext';
 import { SafeImage } from './SafeImage';
 
-export const CategoryStories = () => {
+export const CategoryStories = React.memo(() => {
   const { selectedCategory, setSelectedCategory, setSelectedSubCategory, setSearchQuery } = useShop();
 
   const handleCategoryClick = (catSlug) => {
@@ -87,4 +87,4 @@ export const CategoryStories = () => {
       </div>
     </section>
   );
-};
+});

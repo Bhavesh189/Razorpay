@@ -136,6 +136,33 @@ const renderFormattedText = (text) => {
   });
 };
 
+const getLoadingStagesForText = (text = '') => {
+  const value = text.toLowerCase();
+  const hindi = /[\u0900-\u097F]/.test(text);
+  const hinglish = hindi || /\b(?:hai|kya|mujhe|muje|chahiye|dikhao|batao|bhai|kaisa|kaise|kharidna|dekhna|lena)\b/i.test(value);
+  if (hindi) return [
+    'Infinity AI aapki request samajh raha hai...',
+    'Aapki requirements aur preferences padh raha hoon...',
+    'Catalog mein 30 relevant products search kar raha hoon...',
+    'Price, features aur ratings compare kar raha hoon...',
+    'Aapke liye best matches shortlist kar raha hoon...'
+  ];
+  if (hinglish) return [
+    'Infinity AI aapki request samajh raha hai...',
+    'Aapki requirements aur preferences read kar raha hoon...',
+    'Catalog mein 30 relevant products search kar raha hoon...',
+    'Price, features aur ratings compare kar raha hoon...',
+    'Aapke liye best matches shortlist kar raha hoon...'
+  ];
+  return [
+    'Infinity AI is understanding your request...',
+    'Reading your requirements and preferences...',
+    'Searching 30 relevant products from the catalog...',
+    'Comparing price, features and ratings...',
+    'Shortlisting your best matches...'
+  ];
+};
+
 // Smooth Typewriter Stream Text Animation
 const TypewriterText = ({ text, isNew, onFinish, onTick }) => {
   const [displayedText, setDisplayedText] = useState(isNew ? '' : text);
@@ -309,7 +336,7 @@ const RequirementCard = ({ questionnaire, onSubmit, isSubmitted = false }) => {
           <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
             <span>Features & Priorities</span>
           </label>
-          <div className="flex flex-wrap gap-2 pt-0.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-0.5">
             {questionnaire.options.map((opt, idx) => {
               const optVal = opt.value || opt.label;
               const isSelected = selectedOptions.includes(optVal);
@@ -509,8 +536,11 @@ export const AIAssistantModal = () => {
 
   const [inputQuery, setInputQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("Infinity AI is understanding your request...");
+  const loadingStagesRef = useRef(getLoadingStagesForText(''));
   const [voiceState, setVoiceState] = useState('idle'); // 'idle' | 'listening' | 'processing' | 'error'
   const isListening = voiceState === 'listening';
+  const recognitionRef = useRef(null);
   const voiceSubmissionLockRef = useRef(false);
   const STORAGE_KEY = 'infinity_ai_chat';
   const [showHistory, setShowHistory] = useState(false);
@@ -551,6 +581,17 @@ export const AIAssistantModal = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isCompressingImage, setIsCompressingImage] = useState(false);
+
+  useEffect(() => {
+    if (!loading) return undefined;
+    let stageIndex = 0;
+    setLoadingStage(loadingStagesRef.current[0]);
+    const timer = setInterval(() => {
+      stageIndex = (stageIndex + 1) % loadingStagesRef.current.length;
+      setLoadingStage(loadingStagesRef.current[stageIndex]);
+    }, 1800);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   // Client-side WebP Image Compressor (maxDim: 1200px, quality: 0.85)
   const compressImageToWebP = (file, maxDim = 1200, quality = 0.85) => {
@@ -626,7 +667,8 @@ export const AIAssistantModal = () => {
       reader.readAsDataURL(file);
     } finally {
       setIsCompressingImage(false);
-      e.target.value = "";
+      // Clear the native input so selecting the same file again still fires onChange.
+      if (e.target) e.target.value = "";
     }
   };
 
@@ -1100,6 +1142,8 @@ export const AIAssistantModal = () => {
     setSelectedImage(null);
     setImagePreview(null);
     setLoading(true);
+    loadingStagesRef.current = getLoadingStagesForText(textToSend);
+    setLoadingStage(loadingStagesRef.current[1]);
 
     const historyPayload = messages
       .filter(m => !m.id.startsWith('msg-welcome'))
@@ -1241,6 +1285,8 @@ export const AIAssistantModal = () => {
                   streamedText += data.text;
                   setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, text: streamedText } : m));
                 }
+              } else if (eventType === 'status') {
+                if (data.message) setLoadingStage(data.message);
               } else if (eventType === 'question') {
                 setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, questionnaire: data } : m));
               } else if (eventType === 'products') {
@@ -1357,6 +1403,7 @@ export const AIAssistantModal = () => {
       }
     } finally {
       setLoading(false);
+      setLoadingStage("Infinity AI is ready");
     }
   };
 
@@ -1389,6 +1436,8 @@ export const AIAssistantModal = () => {
 
     setMessages(prev => [...prev, newMsg]);
     setLoading(true);
+    loadingStagesRef.current = getLoadingStagesForText(displayText);
+    setLoadingStage(loadingStagesRef.current[1]);
 
     try {
       const historyPayload = messages
@@ -1406,7 +1455,7 @@ export const AIAssistantModal = () => {
         body: JSON.stringify({
           sessionId: chatSessionIdRef.current || sessionId,
           requirementSessionId: sessionId,
-          category: questionnaire?.category || "Laptops & Computers",
+          category: questionnaire?.category || requirementsData.category || null,
           requirements: requirementsData,
           history: historyPayload,
           cartContext: cart.map(c => ({ id: c.product.id, title: c.product.title, category: c.product.category, subCategory: c.product.subCategory, price: c.product.price })),
@@ -1461,6 +1510,7 @@ export const AIAssistantModal = () => {
       ]);
     } finally {
       setLoading(false);
+      setLoadingStage("Infinity AI is ready");
     }
   };
 
@@ -1511,19 +1561,26 @@ export const AIAssistantModal = () => {
       handleSendQuery(transcript).finally(() => {
         setVoiceState('idle');
         voiceSubmissionLockRef.current = false;
+        recognitionRef.current = null;
       });
     };
 
     recognition.onerror = (event) => {
       console.warn("Speech recognition error:", event.error);
       setVoiceState('error');
-      showToast("Mic error or permission denied. Please try again or type.");
+      const message = event.error === 'not-allowed'
+        ? "Mic permission denied. Browser settings mein microphone allow karke dobara try karo."
+        : event.error === 'no-speech'
+          ? "Kuch suna nahi—mic ke paas clearly bolkar dobara try karo."
+          : "Mic start nahi ho paya. Please dobara try karo ya type karke search karo.";
+      showToast(message);
       setTimeout(() => setVoiceState('idle'), 2500);
     };
 
     recognition.onend = () => {
-      if (voiceState === 'listening') {
+      if (!voiceSubmissionLockRef.current && recognitionRef.current === recognition) {
         setVoiceState('idle');
+        recognitionRef.current = null;
       }
     };
 
@@ -1627,8 +1684,8 @@ export const AIAssistantModal = () => {
   };
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isFullScreen ? 'p-0' : 'p-2 sm:p-4'} bg-slate-950/70 backdrop-blur-md overflow-hidden animate-in fade-in duration-200`}>
-      <div className={`bg-white ${isFullScreen ? 'w-full h-full rounded-none max-w-none border-none' : 'rounded-[32px] max-w-3xl w-full h-[92vh] sm:h-[86vh] border-2 border-indigo-100/60 shadow-2xl shadow-indigo-950/20'} flex flex-col overflow-hidden relative transition-all duration-300`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${isFullScreen ? 'p-0' : 'p-2 sm:p-4 lg:p-8'} bg-slate-950/70 backdrop-blur-md overflow-hidden animate-in fade-in duration-200`}>
+      <div className={`bg-white ${isFullScreen ? 'w-full h-full rounded-none max-w-none border-none' : 'rounded-[32px] max-w-3xl lg:max-w-5xl w-full h-[92vh] sm:h-[86vh] lg:h-[80vh] border-2 border-indigo-100/60 shadow-2xl shadow-indigo-950/20'} flex flex-col overflow-hidden relative transition-all duration-300`}>
 
         {/* 1. HEADER (MATCHING SCREENSHOT) */}
         <div className="bg-gradient-to-r from-[#5442f6] via-[#6352f7] to-[#7f52f8] px-5 py-4 text-white flex items-center justify-between flex-shrink-0 shadow-md">
@@ -2168,9 +2225,26 @@ export const AIAssistantModal = () => {
 
             {/* Loading Indicator */}
             {loading && (
-              <div className="flex items-center gap-2 pl-11 text-xs text-indigo-600 font-bold animate-pulse py-2">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Infinity AI is finding the best matches...</span>
+              <div className="ml-11 max-w-md rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center gap-3">
+                  <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-200">
+                    <Sparkles className="w-5 h-5 animate-pulse" />
+                    <span className="absolute inset-0 rounded-xl border-2 border-indigo-300/60 animate-ping" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-extrabold text-indigo-900">Infinity AI is working</span>
+                      <Activity className="w-4 h-4 text-emerald-500 animate-pulse" />
+                    </div>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-600 transition-all">{loadingStage}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-1.5">
+                  {loadingStagesRef.current.map((stage, index) => (
+                    <span key={stage} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${loadingStage === stage ? 'bg-indigo-600' : index === 0 ? 'bg-indigo-200' : 'bg-slate-100'}`} />
+                  ))}
+                </div>
+                <p className="mt-2 text-[10px] font-medium text-slate-400">Catalog scan → requirement match → AI shortlist</p>
               </div>
             )}
 
@@ -2222,7 +2296,12 @@ export const AIAssistantModal = () => {
             {/* 1. Dedicated Image Upload / Paperclip Button */}
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = "";
+                  fileInputRef.current.click();
+                }
+              }}
               className="w-9 h-9 rounded-full bg-white text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 flex-shrink-0"
               title="Attach Product Photo for Visual Search (Gemini Vision)"
             >

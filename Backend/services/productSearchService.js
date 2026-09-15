@@ -6,22 +6,65 @@ import { Product } from '../src/models/Product.js';
 export async function searchProducts(requirements, cursor = null, limit = 30) {
   try {
     const query = { isActive: true };
+    const addCategorySearch = (pattern, excludeAccessories = false) => {
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { category: { $regex: pattern } },
+          { subCategory: { $regex: pattern } },
+          { title: { $regex: pattern } }
+        ]
+      });
+      if (excludeAccessories) {
+        query.$nor = [
+          { title: { $regex: /bag|backpack|sleeve|case|cover|charger|stand|dock|mouse|keyboard|accessor/i } },
+          { subCategory: { $regex: /bag|backpack|accessor/i } }
+        ];
+      }
+    };
 
     if (requirements.category && requirements.category !== 'all') {
       const catLower = requirements.category.toLowerCase();
       if (catLower.includes('laptop') || catLower.includes('computer')) {
-        query.subCategory = { $regex: /laptop|computer/i };
+        addCategorySearch(/laptop|computer/i, true);
       } else if (catLower.includes('phone') || catLower.includes('mobile')) {
-        query.subCategory = { $regex: /mobile|phone|smartphone/i };
+        addCategorySearch(/mobile|phone|smartphone/i);
       } else if (catLower.includes('headphone') || catLower.includes('audio') || catLower.includes('earbud')) {
-        query.subCategory = { $regex: /audio|headphone|earbud/i };
+        addCategorySearch(/audio|headphone|earbud|speaker|neckband/i);
       } else if (catLower.includes('shoe') || catLower.includes('sneaker') || catLower.includes('footwear')) {
-        query.category = { $regex: /footwear/i };
+        addCategorySearch(/shoe|sneaker|footwear/i);
+      } else if (catLower.includes('fashion') || catLower.includes('shirt') || catLower.includes('clothing')) {
+        addCategorySearch(/fashion|shirt|t-shirt|hoodie|jeans|trouser|clothing|dress|saree|kurti/i);
+      } else if (catLower.includes('beauty') || catLower.includes('trimmer') || catLower.includes('fragrance') || catLower.includes('perfume')) {
+        addCategorySearch(/beauty|trimmer|shaver|fragrance|perfume|att[aà]r|skincare/i);
+      } else if (catLower.includes('fitness') || catLower.includes('gym') || catLower.includes('sport')) {
+        addCategorySearch(/fitness|gym|sport|dumbbell|yoga|workout|massage/i);
+      } else if (catLower.includes('appliance') || catLower.includes('kitchen') || catLower.includes('home')) {
+        addCategorySearch(/appliance|kitchen|home|air fryer|blender|kettle|vacuum/i);
       } else {
-        query.$or = [
+        query.$and = query.$and || [];
+        query.$and.push({ $or: [
           { category: { $regex: new RegExp(requirements.category, 'i') } },
           { subCategory: { $regex: new RegExp(requirements.category, 'i') } }
-        ];
+        ] });
+      }
+    }
+
+    if (requirements.query) {
+      const queryTerms = String(requirements.query)
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(term => term.length >= 3 && !/^(?:under|below|with|want|need|show|me|mujhe|chahiye|please)$/i.test(term))
+        .slice(0, 8);
+      if (queryTerms.length > 0) {
+        query.$and = query.$and || [];
+        query.$and.push({
+          $or: queryTerms.flatMap(term => [
+            { title: { $regex: new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } },
+            { tags: { $regex: new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } },
+            { subCategory: { $regex: new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } }
+          ])
+        });
       }
     }
 

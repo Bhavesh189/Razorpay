@@ -1,4 +1,5 @@
 import { Product } from '../models/Product.js';
+import { logger } from '../utils/logger.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -25,8 +26,12 @@ export const getProducts = async (req, res) => {
         page: pageNum,
         limit: limitNum
       });
-      console.log('Search Res Products length:', searchRes.products.length);
-      console.log('Did you mean:', searchRes.didYouMean);
+      logger.info('catalog.search.completed', {
+        query: searchQuery,
+        resultCount: searchRes.products.length,
+        total: searchRes.total,
+        correctedQuery: searchRes.didYouMean || null
+      });
       return res.status(200).json(searchRes);
     }
 
@@ -92,7 +97,7 @@ export const getProducts = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get Products Error:', error);
+    logger.error('catalog.products.failed', { error, query: searchQuery });
     res.status(500).json({ success: false, message: 'Server error while fetching products' });
   }
 };
@@ -110,7 +115,7 @@ export const getProductById = async (req, res) => {
       product
     });
   } catch (error) {
-    console.error('Get Product Error:', error);
+    logger.error('catalog.product.failed', { error, productId: req.params.id });
     res.status(500).json({ success: false, message: 'Server error while fetching product details' });
   }
 };

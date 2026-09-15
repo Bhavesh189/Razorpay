@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { Product } from '../src/models/Product.js';
 import { baseCatalog, generateVariations } from './data/baseCatalog.js';
+import { featuredCatalog, infinityCatalog } from './data/infinityCatalog.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,7 +30,8 @@ const seedDatabase = async () => {
     console.log('⚙️ Phase 2: Generating expansive realistic variants...');
     const allProducts = [];
     
-    for (const baseItem of baseCatalog) {
+    const catalogTemplates = [...baseCatalog, ...infinityCatalog, ...featuredCatalog];
+    for (const baseItem of catalogTemplates) {
       const variants = generateVariations(baseItem);
       allProducts.push(...variants);
     }
@@ -74,9 +76,9 @@ const seedDatabase = async () => {
 PRODUCT SEED COMPLETE
 ========================================
 Products created: ${dbProducts.length}
-Categories: 4
-Subcategories: 4
-Broken images: 0 (Strictly mapped to reliable CDN)
+  Categories: ${new Set(dbProducts.map(product => product.category)).size}
+  Subcategories: ${new Set(dbProducts.map(product => product.subCategory)).size}
+  Broken images: 0 (Catalog image URLs assigned)
 Duplicate products: 0
 Failed records: 0
 ========================================

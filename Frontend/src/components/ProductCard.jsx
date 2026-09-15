@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
-import { Heart, Star, Sparkles, ShoppingBag, Flame, Eye } from 'lucide-react';
+import React from 'react';
+import { Heart, Star, Sparkles, ShoppingBag } from 'lucide-react';
 import { useShop } from '../context/ShopContext';
 import { SafeImage } from './SafeImage';
 
-export const ProductCard = ({ product }) => {
+export const ProductCard = React.memo(({ product }) => {
   const { 
     isInWishlist, 
     toggleWishlist, 
@@ -13,16 +13,6 @@ export const ProductCard = ({ product }) => {
   } = useShop();
 
   const isWishlisted = isInWishlist(product.id);
-
-  // Psychology: Generate consistent "social proof" & "scarcity" numbers per product
-  const socialProof = useMemo(() => {
-    const hash = product.id?.toString().split('').reduce((a, c) => a + c.charCodeAt(0), 0) || 0;
-    const boughtToday = 200 + (hash * 37) % 4800;
-    const stockLeft = 2 + (hash * 13) % 8;
-    const showUrgency = hash % 3 === 0; // ~33% of products show urgency
-    const showSocial = hash % 2 === 0; // ~50% of products show social proof
-    return { boughtToday, stockLeft, showUrgency, showSocial };
-  }, [product.id]);
 
   const handleCardClick = () => {
     setSelectedProduct(product);
@@ -57,14 +47,6 @@ export const ProductCard = ({ product }) => {
           <div className="absolute top-2.5 left-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-md flex items-center gap-1">
             <Sparkles className="w-2.5 h-2.5 text-black" />
             Mall
-          </div>
-        )}
-
-        {/* Urgency Badge — Only 3 left! */}
-        {socialProof.showUrgency && (
-          <div className="absolute top-2.5 left-2.5 bg-red-500/90 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-md flex items-center gap-1 urgency-pulse">
-            <Flame className="w-2.5 h-2.5" />
-            Only {socialProof.stockLeft} left!
           </div>
         )}
 
@@ -119,18 +101,8 @@ export const ProductCard = ({ product }) => {
           )}
         </div>
 
-        {/* Social Proof Badge */}
-        {socialProof.showSocial && (
-          <div className="inline-flex items-center gap-1">
-            <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20 flex items-center gap-1">
-              <Eye className="w-2.5 h-2.5" />
-              {socialProof.boughtToday.toLocaleString()} bought today
-            </span>
-          </div>
-        )}
-
-        {/* Free Delivery Badge */}
-        {product.freeDelivery && !socialProof.showSocial && (
+        {/* Verified delivery information only; no fabricated scarcity or social proof. */}
+        {product.freeDelivery && (
           <div className="inline-block">
             <span className="text-[10px] font-semibold text-slate-400 bg-[#1e1e2e] px-2 py-0.5 rounded-md border border-[#2a2a3a]">
               Free Delivery
@@ -152,5 +124,5 @@ export const ProductCard = ({ product }) => {
       </div>
     </div>
   );
-};
+});
 

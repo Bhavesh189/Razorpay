@@ -1,11 +1,12 @@
 import mongoose from 'mongoose';
+import { logger } from '../utils/logger.js';
 
 export const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI);
-    console.log(`[MongoDB] ✅ Connected to Atlas: ${conn.connection.host} (Database: ${conn.connection.name})`);
+    logger.info('database.connected', { host: conn.connection.host, database: conn.connection.name });
   } catch (error) {
-    console.error(`[MongoDB] ❌ Connection error: ${error.message}`);
+    logger.error('database.connection.failed', { error });
     process.exit(1);
   }
 };

@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 import { OTP } from '../models/OTP.js';
 import { sendOTP } from '../services/msg91Service.js';
+import { logger } from '../utils/logger.js';
 
 // Schemas
 const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian mobile number');
@@ -46,7 +47,7 @@ export const requestOTP = async (req, res) => {
     // Validate phone
     const validation = phoneSchema.safeParse(phoneNumber);
     if (!validation.success) {
-      return res.status(400).json({ success: false, message: validation.error.errors[0].message });
+      return res.status(400).json({ success: false, message: validation.error.issues?.[0]?.message || 'Invalid Indian mobile number' });
     }
 
     // Check rate limit for OTP requests (basic check, complex can use Redis)
@@ -60,9 +61,12 @@ export const requestOTP = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const otpHash = await bcrypt.hash(otpCode, salt);
 
-    // Save to DB
+    // Prepare the hashed OTP, but persist it only after MSG91 accepts the request.
     const expiresAt = new Date(Date.now() + parseInt(process.env.OTP_EXPIRY || 300) * 1000);
-    
+
+    // Send via MSG91
+    await sendOTP(phoneNumber, otpCode);
+
     if (existingOTP) {
       existingOTP.otpHash = otpHash;
       existingOTP.attempts = 0;
@@ -72,9 +76,6 @@ export const requestOTP = async (req, res) => {
       await OTP.create({ phoneNumber, otpHash, expiresAt });
     }
 
-    // Send via MSG91
-    await sendOTP(phoneNumber, otpCode);
-
     // Note: Do NOT return the OTP in production. Only for local testing if env is dev
     res.status(200).json({
       success: true,
@@ -82,8 +83,11 @@ export const requestOTP = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Request OTP Error:', error);
-    res.status(500).json({ success: false, message: 'Server error while sending OTP' });
+    logger.error('auth.otp.request.failed', { error, phoneLast4: String(phoneNumber || '').slice(-4) });
+    res.status(error.statusCode && error.statusCode >= 400 && error.statusCode < 600 ? error.statusCode : 500).json({
+      success: false,
+      message: error.message || 'Server error while sending OTP'
+    });
   }
 };
 
@@ -133,7 +137,7 @@ export const verifyOTP = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Verify OTP Error:', error);
+    logger.error('auth.otp.verify.failed', { error, phoneLast4: String(phoneNumber || '').slice(-4) });
     res.status(500).json({ success: false, message: 'Server error while verifying OTP' });
   }
 };
@@ -141,31 +145,30 @@ export const verifyOTP = async (req, res) => {
 // 3. Signup
 export const signup = async (req, res) => {
   try {
-    const { name, phoneNumber, password } = req.body;
+    const { name, phoneNumber, password, role } = req.body;
 
     // Validate
     if (!name || name.trim() === '') return res.status(400).json({ success: false, message: 'Name is required' });
     const phoneValid = phoneSchema.safeParse(phoneNumber);
     if (!phoneValid.success) return res.status(400).json({ success: false, message: phoneValid.error.errors[0].message });
     const passValid = passwordSchema.safeParse(password);
-    if (!passValid.success) return res.status(400).json({ success: false, message: passValid.error.errors[0].message });
+    if (!passValid.success) return res.status(400).json({ success: false, message: passValid.error.issues?.[0]?.message || 'Invalid password' });
 
     const existingUser = await User.findOne({ phoneNumber });
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'Account already exists with this phone number' });
     }
 
-    // Note: In a strict flow, you'd ensure they verified OTP first before allowing this.
-    // For this flow, we assume they verified OTP in the previous step.
-    
-    const salt = await bcrypt.genSalt(12);
+    // Latency optimization: lower salt round to 10 for faster hashing (~60ms instead of ~300ms)
+    const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
     const user = await User.create({
       name,
       phoneNumber,
       passwordHash,
-      isPhoneVerified: true, // Assuming OTP step passed just prior
+      role: role === 'supplier' ? 'supplier' : 'user',
+      isPhoneVerified: false, // OTP verification is now deferred to Account Options
       lastLoginAt: new Date()
     });
 

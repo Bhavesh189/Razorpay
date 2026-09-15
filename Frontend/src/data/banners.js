@@ -62,9 +62,9 @@ export const trustPillars = [
 ];
 
 export const budgetDeals = [
-  { label: "Under ₹99", maxPrice: 99, tag: "Super Saver", color: "bg-amber-500", claimed: 87 },
-  { label: "Under ₹199", maxPrice: 199, tag: "Crazy Deals", color: "bg-cyan-500", claimed: 72 },
-  { label: "Under ₹299", maxPrice: 299, tag: "Top Picks", color: "bg-emerald-500", claimed: 58 },
-  { label: "Under ₹499", maxPrice: 499, tag: "Premium Finds", color: "bg-orange-500", claimed: 41 },
+  { label: "Under ₹99", maxPrice: 99, tag: "Super Saver", color: "bg-amber-500" },
+  { label: "Under ₹199", maxPrice: 199, tag: "Crazy Deals", color: "bg-cyan-500" },
+  { label: "Under ₹299", maxPrice: 299, tag: "Top Picks", color: "bg-emerald-500" },
+  { label: "Under ₹499", maxPrice: 499, tag: "Premium Finds", color: "bg-orange-500" },
 ];
 

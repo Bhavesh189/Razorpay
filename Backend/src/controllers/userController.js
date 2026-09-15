@@ -1,5 +1,6 @@
 import { User } from '../models/User.js';
 import { Order } from '../models/Order.js';
+import { logger } from '../utils/logger.js';
 
 // Sync Cart and Wishlist from Frontend
 export const syncUserData = async (req, res) => {
@@ -16,7 +17,7 @@ export const syncUserData = async (req, res) => {
 
     res.status(200).json({ success: true, message: 'Data synced successfully', cart: user.cart, wishlist: user.wishlist });
   } catch (error) {
-    console.error('Sync Data Error:', error);
+    logger.error('user.data_sync.failed', { error, userId: req.user?.id });
     res.status(500).json({ success: false, message: 'Server error while syncing data' });
   }
 };
@@ -52,7 +53,7 @@ export const createOrder = async (req, res) => {
 
     res.status(201).json({ success: true, order: newOrder });
   } catch (error) {
-    console.error('Create Order Error:', error);
+    logger.error('order.create.failed', { error, userId: req.user?.id, orderId: req.body?.orderId });
     res.status(500).json({ success: false, message: 'Failed to create order' });
   }
 };
@@ -63,7 +64,7 @@ export const getUserOrders = async (req, res) => {
     const orders = await Order.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({ success: true, orders });
   } catch (error) {
-    console.error('Fetch Orders Error:', error);
+    logger.error('orders.fetch.failed', { error, userId: req.user?.id });
     res.status(500).json({ success: false, message: 'Failed to fetch orders' });
   }
 };

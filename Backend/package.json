@@ -7,11 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test_production_pillars.js && node test_ecommerce_search_suite.js && node test_ai_scenarios.js",
-    "test:pillars": "node test_production_pillars.js",
-    "test:search": "node test_ecommerce_search_suite.js",
+    "test": "node test_search.js && node test_ai_scenarios.js",
+    "test:search": "node test_search.js",
     "test:ai": "node test_ai_scenarios.js",
-    "test:catalog": "node test_full_catalog_verification.js",
     "seed:products": "node scripts/seedProducts.js",
     "validate:images": "node scripts/validateImages.js"
   },

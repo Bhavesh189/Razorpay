@@ -51,12 +51,8 @@ export const BudgetZone = () => {
                 <div className="text-base sm:text-xl font-black text-white group-hover:text-amber-400 transition-colors font-['Outfit']">
                   {deal.label}
                 </div>
-                {/* Scarcity Progress Bar */}
-                <div className="mt-2 mb-1">
-                  <div className="w-full h-1.5 bg-[#1e1e2e] rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-amber-500 to-red-500 rounded-full progress-animate" style={{width: `${deal.claimed}%`}}></div>
-                  </div>
-                  <div className="text-[10px] text-red-400 font-bold mt-1 urgency-pulse">{deal.claimed}% claimed</div>
+                <div className="mt-2 mb-1 text-[10px] text-slate-500 font-medium">
+                  Curated products in this price range
                 </div>
                 <div className="flex items-center gap-1 text-xs text-slate-500 group-hover:text-amber-400 font-semibold">
                   <span>Shop now</span>

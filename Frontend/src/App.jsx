@@ -21,14 +21,19 @@ import { AIAssistantButton } from './components/AIAssistantButton';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { Footer } from './components/Footer';
 import { AccountDashboard } from './components/AccountDashboard';
+import { SupplierDashboard } from './components/SupplierDashboard';
 import { SlidersHorizontal, Sparkles, X } from 'lucide-react';
 
 const MainLayout = () => {
-  const { toastMessage, resetFilters, searchQuery, currentRoute } = useShop();
+  const { toastMessage, resetFilters, searchQuery, currentRoute, user } = useShop();
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isMobileCategoryDrawerOpen, setIsMobileCategoryDrawerOpen] = useState(false);
 
   const isSearchActive = searchQuery && searchQuery.trim().length > 0;
+
+  if (user?.role === 'supplier') {
+    return <SupplierDashboard />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0f] pb-14 md:pb-0">

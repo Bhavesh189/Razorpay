@@ -11,7 +11,8 @@ export const AuthModal = () => {
   const [formData, setFormData] = useState({
     name: '',
     phoneNumber: '',
-    password: ''
+    password: '',
+    role: 'user'
   });
   
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -66,7 +67,7 @@ export const AuthModal = () => {
           }
         } catch(e) { console.warn("Failed to fetch orders"); }
 
-        setUser({ isLoggedIn: true, phone: data.user.phoneNumber, name: data.user.name, id: data.user._id });
+        setUser({ isLoggedIn: true, phone: data.user.phoneNumber, name: data.user.name, id: data.user._id, role: data.user.role });
         showToast("Logged in successfully! 🎉");
         setActiveModal(null);
       } else {
@@ -94,7 +95,7 @@ export const AuthModal = () => {
     setError("");
 
     try {
-      // 1. Send OTP
+      // 1. Request OTP before creating the account.
       const res = await fetch(`${API_URL}/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,10 +105,12 @@ export const AuthModal = () => {
       const data = await res.json();
       
       if (res.ok && data.success) {
+        setOtp(["", "", "", "", "", ""]);
         setStep(2);
-        showToast(data._mockOtp ? `Mock OTP: ${data._mockOtp}` : "OTP sent to your phone");
+        showToast("OTP sent successfully 📱");
+        setTimeout(() => document.getElementById('otp-0')?.focus(), 50);
       } else {
-        setError(data.message || "Failed to send OTP");
+        setError(data.message || "Could not send OTP");
       }
     } catch (err) {
       setError("Server connection error");
@@ -157,7 +160,7 @@ export const AuthModal = () => {
         if (signupData.user.wishlist) setWishlist(signupData.user.wishlist);
         setOrders([]); // Fresh user has no orders
 
-        setUser({ isLoggedIn: true, phone: signupData.user.phoneNumber, name: signupData.user.name, id: signupData.user._id });
+        setUser({ isLoggedIn: true, phone: signupData.user.phoneNumber, name: signupData.user.name, id: signupData.user._id, role: signupData.user.role });
         showToast("Account created successfully! Welcome 🎉");
         setActiveModal(null);
       } else {
@@ -246,6 +249,18 @@ export const AuthModal = () => {
                   />
                 </div>
               </div>
+
+              {mode === 'signup' && (
+                <label className="flex items-center space-x-2 cursor-pointer mt-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.role === 'supplier'}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.checked ? 'supplier' : 'user' })}
+                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                  />
+                  <span className="text-xs font-medium text-slate-700">Create account as Supplier</span>
+                </label>
+              )}
 
               <button
                 type="submit"

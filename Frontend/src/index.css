@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap');
 
 @layer base {
   :root {
@@ -100,23 +100,6 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: gradient-shift 3s linear infinite;
-}
-
-/* ========== URGENCY PULSE ========== */
-@keyframes urgency-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-.urgency-pulse {
-  animation: urgency-pulse 1.5s ease-in-out infinite;
-}
-
-/* ========== PROGRESS BAR FILL ========== */
-@keyframes progress-fill {
-  from { width: 0%; }
-}
-.progress-animate {
-  animation: progress-fill 1.5s ease-out forwards;
 }
 
 /* ========== MEGA MENU SHADOW ========== */

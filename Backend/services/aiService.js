@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 import { searchProducts, getRelatedProducts } from './productSearchService.js';
 import { redisService } from './redisService.js';
+import { ProductSearchEngine } from '../search/SearchEngine.js';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -78,15 +79,50 @@ export async function clearSessionState(sessionId) {
   }
 }
 
+async function rememberShoppingTurn(sessionId, previousState, userQuery, assistantText, category, requirements, products, cartContext) {
+  if (!sessionId) return;
+  const conversation = [
+    ...(previousState?.conversation || []),
+    { role: 'user', text: userQuery },
+    { role: 'assistant', text: assistantText }
+  ].slice(-12);
+  await setSessionState(sessionId, {
+    ...(previousState || {}),
+    conversation,
+    currentIntent: products?.length ? 'RECOMMENDING' : 'COLLECTING_REQUIREMENTS',
+    category: category || previousState?.category || null,
+    requirements: requirements || previousState?.requirements || {},
+    activeResults: (products || []).slice(0, 30).map(product => ({
+      id: product.id,
+      title: product.title,
+      price: product.price,
+      category: product.category,
+      subCategory: product.subCategory
+    })),
+    cart: cartContext || previousState?.cart || []
+  });
+}
+
+const cleanEnvValue = (value = '') => String(value || '').replace(/['"]/g, '').trim();
+const isUsableKey = (value, placeholders = []) => {
+  const cleaned = cleanEnvValue(value);
+  return Boolean(cleaned && !placeholders.includes(cleaned));
+};
+const parseModelList = (value, fallback) => {
+  return cleanEnvValue(value)
+    ? cleanEnvValue(value).split(',').map(model => model.trim()).filter(Boolean)
+    : fallback;
+};
+
 // Initialize Gemini safely
-const geminiApiKey = (process.env.GEMINI_API_KEY || process.env.AI_API_KEY || '').replace(/['"]/g, '').trim();
+const geminiApiKey = cleanEnvValue(process.env.GEMINI_API_KEY || process.env.AI_API_KEY);
 let genAI = null;
 let generativeModel = null;
-if (geminiApiKey && geminiApiKey !== 'your_api_key_here' && geminiApiKey !== 'your_gemini_api_key_here') {
+if (isUsableKey(geminiApiKey, ['your_api_key_here', 'your_gemini_api_key_here'])) {
   try {
     genAI = new GoogleGenerativeAI(geminiApiKey);
     generativeModel = genAI.getGenerativeModel({ 
-      model: "gemini-3.7-flash",
+      model: "gemini-2.0-flash",
       generationConfig: { responseMimeType: "application/json" }
     });
   } catch (e) {
@@ -1214,6 +1250,40 @@ export function isHindiOrHinglish(text = "") {
   return hasDevanagari || hasHinglish;
 }
 
+export function detectUserLanguage(text = "") {
+  if (isHindiOrHinglish(text)) return /[\u0900-\u097F]/.test(text) ? 'hindi' : 'hinglish';
+  return 'english';
+}
+
+function getProgressMessages(text = "") {
+  const language = detectUserLanguage(text);
+  if (language === 'hindi') {
+    return [
+      'Infinity AI aapki request samajh raha hai...',
+      'Aapki requirements aur preferences padh raha hoon...',
+      'Catalog mein 30 relevant products search kar raha hoon...',
+      'Price, features aur ratings compare kar raha hoon...',
+      'Aapke liye best matches shortlist kar raha hoon...'
+    ];
+  }
+  if (language === 'hinglish') {
+    return [
+      'Infinity AI aapki request samajh raha hai...',
+      'Aapki requirements aur preferences read kar raha hoon...',
+      'Catalog mein 30 relevant products search kar raha hoon...',
+      'Price, features aur ratings compare kar raha hoon...',
+      'Aapke liye best matches shortlist kar raha hoon...'
+    ];
+  }
+  return [
+    'Infinity AI is understanding your request...',
+    'Reading your requirements and preferences...',
+    'Searching 30 relevant products from the catalog...',
+    'Comparing price, features and ratings...',
+    'Shortlisting your best matches...'
+  ];
+}
+
 // Generate Dynamic Multi-Turn Category-Specific Questionnaire with MCQ, Multi-Select, No Preference & Custom Input
 export function getDynamicQuestionnaireForCategory(categoryOrQuery = "", previousAnswers = {}, accumulatedRequirements = {}) {
   const q = (categoryOrQuery || "").toLowerCase();
@@ -1495,12 +1565,13 @@ export function getActiveCategoryFromContext(userQuery = "", conversationHistory
   if (q.includes("laptop") || q.includes("computer") || q.includes("macbook") || q.includes("pc")) return "laptops";
   if (q.includes("headphone") || q.includes("earphone") || q.includes("earbud") || q.includes("tws") || q.includes("soundbar") || q.includes("speaker") || q.includes("audio")) return "headphones";
   if (/\b(?:phone|phones|mobile|mobiles|smartphone|smartphones|5g)\b/i.test(q)) return "phones";
-  if (q.includes("saree") || q.includes("kurti") || q.includes("lehenga") || q.includes("ethnic") || q.includes("shirt") || q.includes("tshirt") || q.includes("t-shirt") || q.includes("dress") || q.includes("clothing")) return "fashion";
+  if (q.includes("saree") || q.includes("kurti") || q.includes("lehenga") || q.includes("ethnic") || q.includes("shirt") || q.includes("tshirt") || q.includes("t-shirt") || q.includes("hoodie") || q.includes("sweatshirt") || q.includes("jeans") || q.includes("pants") || q.includes("trouser") || q.includes("dress") || q.includes("clothing")) return "fashion";
   if (q.includes("shoe") || q.includes("shoes") || q.includes("sneaker") || q.includes("footwear")) return "footwear";
   if (q.includes("gym") || q.includes("fitness") || q.includes("dumbbell") || q.includes("workout") || q.includes("yoga") || q.includes("massage gun")) return "fitness";
   if (q.includes("air fryer") || q.includes("blender") || q.includes("mixer") || q.includes("kettle") || q.includes("appliance") || q.includes("kitchen")) return "appliances";
   if (q.includes("watch") || q.includes("ghadi") || q.includes("smartwatch")) return "watches";
   if (q.includes("perfume") || q.includes("fragrance") || q.includes("oud") || q.includes("attar") || q.includes("cologne")) return "fragrances";
+  if (q.includes("trimmer") || q.includes("shaver") || q.includes("lipstick") || q.includes("serum") || q.includes("skincare") || q.includes("makeup")) return "beauty";
   if (q.includes("backpack") || q.includes("bag") || q.includes("luggage") || q.includes("wallet")) return "bags";
 
   // 2. Look back in conversation history from newest to oldest
@@ -1511,12 +1582,13 @@ export function getActiveCategoryFromContext(userQuery = "", conversationHistory
       if (text.includes("laptop") || text.includes("computer") || text.includes("macbook")) return "laptops";
       if (text.includes("headphone") || text.includes("earphone") || text.includes("earbud") || text.includes("tws") || text.includes("soundbar") || text.includes("audio")) return "headphones";
       if (/\b(?:phone|phones|mobile|mobiles|smartphone|smartphones|5g)\b/i.test(text)) return "phones";
-      if (text.includes("saree") || text.includes("kurti") || text.includes("lehenga") || text.includes("ethnic") || text.includes("shirt") || text.includes("clothing")) return "fashion";
+      if (text.includes("saree") || text.includes("kurti") || text.includes("lehenga") || text.includes("ethnic") || text.includes("shirt") || text.includes("tshirt") || text.includes("hoodie") || text.includes("jeans") || text.includes("pants") || text.includes("clothing")) return "fashion";
       if (text.includes("shoe") || text.includes("shoes") || text.includes("sneaker") || text.includes("footwear")) return "footwear";
       if (text.includes("gym") || text.includes("fitness") || text.includes("dumbbell") || text.includes("yoga")) return "fitness";
       if (text.includes("air fryer") || text.includes("blender") || text.includes("kitchen")) return "appliances";
       if (text.includes("watch") || text.includes("smartwatch")) return "watches";
       if (text.includes("perfume") || text.includes("fragrance") || text.includes("oud")) return "fragrances";
+      if (text.includes("trimmer") || text.includes("shaver") || text.includes("lipstick") || text.includes("serum") || text.includes("makeup")) return "beauty";
       if (text.includes("backpack") || text.includes("bag") || text.includes("luggage")) return "bags";
     }
   }
@@ -1666,7 +1738,7 @@ export function analyzeConversationState(userQuery = "", conversationHistory = [
     /\b(?:product\s*confirm\s*hai|confirm\s*hai|confirm\s*karo|haan\s*product\s*confirm\s*hai|haan\s*bhai\s*dikha|bas\s*ab\s*products\s*dikhao|requirements\s*complete|yes\s*this\s*is\s*what\s*i\s*want|okay\s*find\s*it|find\s*it\s*now|show\s*matches|show\s*products)\b/i.test(q)
   );
   if (isRequirementConfirmation) {
-    const contextualCategory = getActiveCategoryFromContext(userQuery, conversationHistory) || "laptops";
+    const contextualCategory = getActiveCategoryFromContext(userQuery, conversationHistory);
     return {
       state: ConversationState.REQUIREMENTS_COMPLETE,
       intent: 'product_recommendation',
@@ -1687,7 +1759,7 @@ export function analyzeConversationState(userQuery = "", conversationHistory = [
 
   const productTerms = [
     'laptop', 'computer', 'macbook', 'phone', 'mobile', 'smartphone', '5g', 'headphone', 'earphone',
-    'earbuds', 'tws', 'saree', 'kurti', 'lehenga', 'shirt', 'tshirt', 't-shirt', 'shoe', 'shoes',
+    'earbuds', 'tws', 'saree', 'kurti', 'lehenga', 'shirt', 'tshirt', 't-shirt', 'hoodie', 'sweatshirt', 'jeans', 'pants', 'trimmer', 'shaver', 'shoe', 'shoes',
     'sneaker', 'watch', 'perfume', 'air fryer', 'blender', 'gym', 'fitness', 'dumbbell', 'yoga', 'bag', 'backpack'
   ];
   const hasProductKeywords = productTerms.some(term => q.includes(term));
@@ -1770,7 +1842,7 @@ export function analyzeConversationState(userQuery = "", conversationHistory = [
     detectedCategory = "headphones";
   } else if (/\b(?:phone|phones|mobile|mobiles|smartphone|smartphones|5g)\b/i.test(q)) {
     detectedCategory = "phones";
-  } else if (q.includes("saree") || q.includes("kurti") || q.includes("lehenga") || q.includes("ethnic") || q.includes("shirt") || q.includes("tshirt") || q.includes("t-shirt") || q.includes("dress") || q.includes("clothing")) {
+  } else if (q.includes("saree") || q.includes("kurti") || q.includes("lehenga") || q.includes("ethnic") || q.includes("shirt") || q.includes("tshirt") || q.includes("t-shirt") || q.includes("hoodie") || q.includes("sweatshirt") || q.includes("jeans") || q.includes("pants") || q.includes("trouser") || q.includes("dress") || q.includes("clothing")) {
     detectedCategory = "fashion";
   } else if (q.includes("shoe") || q.includes("shoes") || q.includes("sneaker") || q.includes("footwear")) {
     detectedCategory = "footwear";
@@ -1782,6 +1854,8 @@ export function analyzeConversationState(userQuery = "", conversationHistory = [
     detectedCategory = "watches";
   } else if (q.includes("perfume") || q.includes("fragrance") || q.includes("oud") || q.includes("attar") || q.includes("cologne")) {
     detectedCategory = "fragrances";
+  } else if (q.includes("trimmer") || q.includes("shaver") || q.includes("lipstick") || q.includes("serum") || q.includes("makeup") || q.includes("skincare")) {
+    detectedCategory = "beauty";
   } else if (q.includes("backpack") || q.includes("bag") || q.includes("luggage") || q.includes("wallet")) {
     detectedCategory = "bags";
   }
@@ -1892,7 +1966,7 @@ export function checkImpossibleBudget(userQuery, numericBudget) {
 export async function processAIAgentRequirements({
   sessionId,
   requirementSessionId,
-  category = "laptops",
+  category = null,
   questionId = null,
   answer = null,
   customInput = null,
@@ -1902,8 +1976,12 @@ export async function processAIAgentRequirements({
   cartContext = [],
   userProfile = {}
 }) {
-  const catKey = (category || "").toLowerCase();
-  let normalizedCategory = "laptops";
+  const inferredCategory = getActiveCategoryFromContext(
+    [category, ...(history || []).map(item => item.text || item.content || '')].filter(Boolean).join(' '),
+    []
+  );
+  const catKey = (category || inferredCategory || "").toLowerCase();
+  let normalizedCategory = inferredCategory || "all";
   if (catKey.includes("laptop") || catKey.includes("computer")) normalizedCategory = "laptops";
   else if (catKey.includes("headphone") || catKey.includes("audio") || catKey.includes("earbud")) normalizedCategory = "headphones";
   else if (catKey.includes("phone") || catKey.includes("mobile") || catKey.includes("smart")) normalizedCategory = "phones";
@@ -1956,7 +2034,7 @@ export async function processAIAgentRequirements({
   const isBudgetActive = Boolean(accumulated.isBudgetActive && budget);
 
   const queryComposite = [
-    normalizedCategory,
+    normalizedCategory !== "all" ? normalizedCategory : '',
     priorities.join(" "),
     customReq,
     isBudgetActive && budget ? `under ${budget}` : ''
@@ -1983,7 +2061,8 @@ export async function processAIAgentRequirements({
 
   // Retrieve matching products via structured catalog search
   const matchedObj = getSearchEngine().search({
-    category: normalizedCategory,
+    query: queryComposite,
+    category: "all",
     priorities,
     requirements: priorities,
     customRequirements: customReq,
@@ -1994,7 +2073,7 @@ export async function processAIAgentRequirements({
   const matched = matchedObj.products || [];
 
   const candidatePool = matched.slice(0, 30);
-  const topProducts = candidatePool.slice(0, 5);
+  const topProducts = candidatePool.slice(0, 6);
 
   const contextPackage = buildContextPackage(
     queryComposite,
@@ -2005,9 +2084,8 @@ export async function processAIAgentRequirements({
     detectedReqs
   );
 
-  if (genAI) {
-    const geminiResult = await callGeminiWithContext(contextPackage, candidatePool.slice(0, 15));
-    if (geminiResult && geminiResult.message) {
+  const geminiResult = await callGeminiWithContext(contextPackage, candidatePool);
+  if (geminiResult && geminiResult.message) {
       let finalProducts = [];
       if (Array.isArray(geminiResult.recommendations) && geminiResult.recommendations.length > 0) {
         for (const rec of geminiResult.recommendations) {
@@ -2017,8 +2095,8 @@ export async function processAIAgentRequirements({
             finalProducts.push({
               ...p,
               matchRank: rec.matchRank || (finalProducts.length + 1),
-              whyItMatches: rec.whyMatches || `Matches your requirement for ${detectedReqs.intent || 'performance'}.`,
-              keyHighlight: rec.keyHighlight || (finalProducts.length === 0 ? "Best Overall Match 🥇" : "Top Recommendation")
+              whyItMatches: hideProductIdsFromText(rec.whyMatches || `Matches your requirement for ${detectedReqs.intent || 'performance'}.`, candidatePool),
+              keyHighlight: hideProductIdsFromText(rec.keyHighlight || (finalProducts.length === 0 ? "Best Overall Match 🥇" : "Top Recommendation"), candidatePool)
             });
           }
         }
@@ -2026,6 +2104,7 @@ export async function processAIAgentRequirements({
       if (finalProducts.length === 0) {
         finalProducts = topProducts.length > 0 ? enrichProductsWithRequirementMatch(topProducts, detectedReqs, queryComposite) : [];
       }
+      finalProducts = finalProducts.slice(0, 6);
 
       const relatedProducts = finalProducts.length > 0 ? getRelatedProductsForCategory(queryComposite, finalProducts) : [];
 
@@ -2049,15 +2128,14 @@ export async function processAIAgentRequirements({
       return {
         success: true,
         state: ConversationState.REQUIREMENTS_COMPLETE,
-        reply: geminiResult.message,
-        text: geminiResult.message,
+        reply: hideProductIdsFromText(geminiResult.message, candidatePool),
+        text: hideProductIdsFromText(geminiResult.message, candidatePool),
         products: finalProducts,
         relatedProducts: relatedProducts,
         upsellPitch: upsell,
         requirements: accumulated,
         suggestedFollowUpQueries: geminiResult.suggestedFollowUpQueries || ["Show My Cart 🛒", "Proceed to Checkout ⚡", "Top Deals Today 🔥"]
       };
-    }
   }
 
   return generateFallbackResponse(
@@ -2137,10 +2215,131 @@ export function buildContextPackage(userQuery, conversationHistory = [], cartCon
   };
 }
 
+function extractJsonFromText(text = "") {
+  const cleanText = String(text || '').trim();
+  if (!cleanText) return null;
+  const fencedJson = cleanText.match(/```json\s*([\s\S]*?)```/i);
+  const fencedAny = cleanText.match(/```\s*([\s\S]*?)```/);
+  const objectJson = cleanText.match(/\{[\s\S]*\}/);
+  const arrayJson = cleanText.match(/\[[\s\S]*\]/);
+  return (fencedJson?.[1] || fencedAny?.[1] || objectJson?.[0] || arrayJson?.[0] || cleanText).trim();
+}
+
+function parseProviderJson(providerName, rawText) {
+  const jsonText = extractJsonFromText(rawText);
+  if (!jsonText) return null;
+  try {
+    return JSON.parse(jsonText);
+  } catch (error) {
+    console.warn(`[${providerName}] Returned non-JSON response:`, error.message);
+    return null;
+  }
+}
+
+// Product IDs are internal lookup keys. Never expose them in conversational text.
+function hideProductIdsFromText(text, products = []) {
+  if (typeof text !== 'string' || !Array.isArray(products) || products.length === 0) return text;
+  let safeText = text;
+  for (const product of products) {
+    const productId = product?.id || (product?._id ? product._id.toString() : '');
+    if (!productId || !product?.title) continue;
+    safeText = safeText.split(productId).join(product.title);
+  }
+  return safeText;
+}
+
+async function callGroqWithPrompt(systemInstruction, prompt) {
+  const groqApiKey = cleanEnvValue(process.env.GROQ_API_KEY);
+  if (!isUsableKey(groqApiKey, ['your_groq_key_here'])) return null;
+
+  const groqModels = parseModelList(process.env.GROQ_MODELS, [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'openai/gpt-oss-120b'
+  ]);
+
+  console.log(`[AI Fallback] Trying Groq after Gemini (${groqModels.join(', ')})...`);
+  for (const groqModel of groqModels) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.2,
+          max_tokens: 1400,
+          response_format: { type: 'json_object' }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        console.warn(`[Groq] ${groqModel} failed: ${response.status} ${errorText.slice(0, 180)}`);
+        continue;
+      }
+
+      const data = await response.json();
+      const parsed = parseProviderJson('Groq', data?.choices?.[0]?.message?.content);
+      if (parsed) {
+        console.log(`[Groq] Success with model: ${groqModel}`);
+        return parsed;
+      }
+    } catch (error) {
+      console.warn(`[Groq] ${groqModel} exception:`, error.message);
+    }
+  }
+
+  return null;
+}
+
+async function callHuggingFaceWithPrompt(systemInstruction, prompt) {
+  const hfApiKey = cleanEnvValue(process.env.HF_API_KEY || process.env.HUGGINGFACE_API_KEY);
+  if (!isUsableKey(hfApiKey, ['your_hf_key_here', 'your_huggingface_key_here'])) return null;
+
+  const hfModel = cleanEnvValue(process.env.HF_MODEL || process.env.HUGGINGFACE_MODEL) || 'mistralai/Mixtral-8x7B-Instruct-v0.1';
+  const hfPrompt = `[INST] Return valid JSON only.\n\nSYSTEM:\n${systemInstruction}\n\nUSER:\n${prompt} [/INST]`;
+
+  try {
+    console.log(`[AI Fallback] Trying HuggingFace (${hfModel})...`);
+    const response = await fetch(`https://api-inference.huggingface.co/models/${hfModel}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${hfApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        inputs: hfPrompt,
+        parameters: {
+          max_new_tokens: 1400,
+          return_full_text: false
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.warn(`[HuggingFace] ${hfModel} failed: ${response.status} ${errorText.slice(0, 180)}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const generatedText = Array.isArray(data) ? data?.[0]?.generated_text : data?.generated_text;
+    return parseProviderJson('HuggingFace', generatedText);
+  } catch (error) {
+    console.warn('[HuggingFace] Exception during fallback:', error.message);
+    return null;
+  }
+}
+
 // Call Gemini with full context package to generate dynamic response and structured decisions
 export async function callGeminiWithContext(contextPackage, candidateProducts = [], image = null) {
-  if (!genAI) return null;
-
   const productContext = candidateProducts.length > 0
     ? candidateProducts.map((p, i) => `[Candidate #${i + 1}] ID: "${p.id}" | "${p.title}" | Price: Rs.${p.price} (MRP Rs.${p.originalPrice || p.price}) | Rating: ${p.rating}★ | Specs: ${p.fabric || p.description || ''} | SubCat: ${p.subCategory || ''}`).join('\n')
     : "NO PRODUCTS RETRIEVED (Conversational / Intent Discovery / Requirement Phase).";
@@ -2161,9 +2360,11 @@ CORE INSTRUCTIONS:
 8. When recommending products:
    - CRITICAL GROUNDING RULE: You can ONLY recommend products present in the CANDIDATE PRODUCTS FROM INVENTORY above.
    - Return their exact IDs in recommendedProductIds and recommendations.
+  - IDs are for internal JSON matching only. NEVER write an ID, such as "prod_...", in the user-facing message. Always use the product's exact title instead.
    - NEVER invent products, prices, specs, ratings, or IDs.
    - Rank top 3 to 6 candidates based on user's hard constraints (budget, specs) and soft preferences.
    - Provide clear, user-facing reasons why each product fits (e.g. fits budget, RAM, thermals).
+  - If the user asks to compare products, use the active results and compare price, key features, strengths, trade-offs, and best-for in the user's language. Do not invent specifications.
 9. If the user sets an impossible budget for a category (e.g. gaming laptop under ₹5,000), explain that no options exist in the catalog within that budget, mention the minimum starting price (e.g. ₹37,490 for gaming laptops), and ask if they'd like to adjust their budget.
 10. For cart actions (remove item, show cart, checkout), generate natural confirmation messages and set agentAction.
 
@@ -2240,7 +2441,8 @@ Analyze the user message, context package, and candidate inventory. ${image ? "A
   }
 
     if (genAI) {
-      const modelsToTry = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-computer-use-preview-10-2025", "antigravity-preview-05-2026"];
+      // Only try the 2 most reliable models to reduce latency
+      const modelsToTry = ["gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"];
       let lastError = null;
 
       for (const modelName of modelsToTry) {
@@ -2261,24 +2463,143 @@ Analyze the user message, context package, and candidate inventory. ${image ? "A
           }
         } catch (e) {
           lastError = e;
-          console.warn(`[Gemini] SDK call failed for ${modelName}:`, e.message);
-          if (e.message.includes('503 Service Unavailable') || e.message.includes('529')) {
-             // promptParts already unshifted, need to remove it so next iteration doesn't duplicate
-             promptParts.shift();
-             continue; // try next model
-          }
-          break; // if it's 400 Bad Request or something else, break
+          console.warn(`[Gemini] SDK call failed for ${modelName}:`, e.message.substring(0, 120));
+          promptParts.shift(); // remove unshifted instruction
+          continue; // always try next model on ANY error
         }
       }
       if (lastError) {
-         import('fs').then(fs => fs.writeFileSync('gemini_error.txt', lastError.stack + '\n' + lastError.message));
+         console.warn("[Gemini] All models exhausted. Falling back to Groq...");
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // FALLBACK 1: GROQ (llama-3.1-70b-versatile) — Ultra fast inference
+    // ----------------------------------------------------------------------
+    if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'your_groq_key_here') {
+      try {
+        console.log("[AI Fallback] Calling Groq...");
+        const groqModels = parseModelList(process.env.GROQ_MODELS, [
+          "llama-3.3-70b-versatile",
+          "llama-3.1-8b-instant",
+          "openai/gpt-oss-120b"
+        ]);
+        
+        for (const groqModel of groqModels) {
+          try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: groqModel,
+                messages: [
+                  { role: 'system', content: systemInstruction },
+                  { role: 'user', content: prompt }
+                ],
+                temperature: 0.2,
+                max_tokens: 1400,
+                response_format: { type: 'json_object' }
+              })
+            });
+            if (response.ok) {
+              const data = await response.json();
+              if (data.choices && data.choices[0] && data.choices[0].message) {
+                console.log(`[Groq] ✅ Success with model: ${groqModel}`);
+                return JSON.parse(data.choices[0].message.content);
+              }
+            } else {
+              console.warn(`[Groq] ${groqModel} failed:`, response.status);
+              continue; // try next groq model
+            }
+          } catch (groqErr) {
+            console.warn(`[Groq] ${groqModel} exception:`, groqErr.message);
+            continue;
+          }
+        }
+      } catch (err) {
+        console.warn("[Groq] All models failed:", err.message);
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // FALLBACK 2: HUGGINGFACE (Mixtral-8x7B)
+    // ----------------------------------------------------------------------
+    if (process.env.HF_API_KEY && process.env.HF_API_KEY !== 'your_hf_key_here') {
+      try {
+        console.log("[AI Fallback] Calling HuggingFace...");
+        const hfPrompt = `[INST] You are an AI assistant. Must output valid JSON strictly according to instructions.\n\nSYSTEM INSTRUCTION: ${systemInstruction}\n\n${prompt} [/INST]`;
+        const response = await fetch('https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.HF_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            inputs: hfPrompt,
+            parameters: {
+              max_new_tokens: 1500,
+              return_full_text: false
+            }
+          })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data[0] && data[0].generated_text) {
+            const text = data[0].generated_text;
+            const jsonMatch = text.match(/```json\s*([\s\S]*?)```/) || text.match(/```\s*([\s\S]*?)```/) || text.match(/\{([\s\S]*)\}/);
+            const jsonStr = jsonMatch ? (jsonMatch[1].startsWith('{') ? jsonMatch[1] : '{' + jsonMatch[1] + '}') : text.trim();
+            return JSON.parse(jsonStr);
+          }
+        } else {
+          console.warn("[HuggingFace] Call failed with status:", response.status, await response.text());
+        }
+      } catch (err) {
+        console.warn("[HuggingFace] Exception during fallback:", err.message);
       }
     }
 
   return null;
 }
 
-async function rankProductsWithGemini(userQuery, requirements, products) {
+async function rankProductsWithGemini(userQuery, requirements, products, conversationHistory = []) {
+  if (!products || products.length === 0) return [];
+
+  const candidatePool = products.slice(0, 30);
+  const contextPackage = buildContextPackage(
+    userQuery,
+    conversationHistory,
+    [],
+    {},
+    { state: ConversationState.REQUIREMENTS_COMPLETE, shoppingIntent: true, requirementsComplete: true },
+    requirements || {}
+  );
+
+  // Use the configured provider chain (Gemini -> Groq -> HuggingFace), not Gemini only.
+  const aiResult = await callGeminiWithContext(contextPackage, candidatePool);
+  const recommendations = Array.isArray(aiResult?.recommendations) ? aiResult.recommendations : [];
+  const rankedProducts = recommendations.map((recommendation, index) => {
+    const productId = recommendation.productId || recommendation.id;
+    const product = candidatePool.find(item => {
+      const ids = [item.id, item._id ? item._id.toString() : null].filter(Boolean);
+      return ids.includes(productId);
+    });
+    if (!product) return null;
+    return {
+      ...product,
+      matchRank: recommendation.matchRank || index + 1,
+      whyItMatches: hideProductIdsFromText(recommendation.whyMatches || recommendation.justification || `Matches your stated requirement.`, candidatePool),
+      keyHighlight: hideProductIdsFromText(recommendation.keyHighlight || (index === 0 ? 'Best Overall Match 🥇' : 'Top Recommendation'), candidatePool)
+    };
+  }).filter(Boolean).slice(0, 6);
+
+  if (rankedProducts.length > 0) return rankedProducts;
+  return candidatePool.slice(0, 6);
+}
+
+async function rankProductsWithLegacyGemini(userQuery, requirements, products) {
   if (!genAI || !products || products.length === 0) return products;
   
   // To save tokens, only send id, title, price, and key specs
@@ -2307,7 +2628,7 @@ Return ONLY a JSON array of objects with the following schema:
   const prompt = `USER QUERY: ${userQuery}\nREQUIREMENTS: ${JSON.stringify(requirements)}\nCANDIDATE PRODUCTS: ${JSON.stringify(lightweightProducts)}`;
   const promptParts = [{ text: prompt }];
 
-  const modelsToTry = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-computer-use-preview-10-2025", "antigravity-preview-05-2026"];
+  const modelsToTry = ["gemini-2.0-flash", "gemini-2.5-flash-preview-05-20"];
 
   for (const modelName of modelsToTry) {
     try {
@@ -2335,7 +2656,7 @@ Return ONLY a JSON array of objects with the following schema:
               }
               return null;
            }).filter(Boolean);
-           return rankedProducts.length > 0 ? rankedProducts : products.slice(0, 3);
+           return rankedProducts.length > 0 ? rankedProducts.slice(0, 6) : products.slice(0, 6);
         }
       }
     } catch (e) {
@@ -2345,39 +2666,65 @@ Return ONLY a JSON array of objects with the following schema:
       break; 
     }
   }
-  return products.slice(0, 3);
+  return products.slice(0, 6);
 }
 
 // Main AI Agent Query Processing Function
 export async function processAIAgentQuery(userQuery, conversationHistory = [], cartContext = [], userProfile = {}, image = null, sessionId = "default_session") {
-  
+  const sessionState = await getSessionState(sessionId);
+  const effectiveHistory = [
+    ...(sessionState?.conversation || []),
+    ...(conversationHistory || [])
+  ].slice(-12);
   const contextPackage = {
     userQuery,
-    conversationHistory: conversationHistory.slice(-5),
+    conversationHistory: effectiveHistory.slice(-8),
     cartContext,
-    userProfile
+    userProfile,
+    activeResults: sessionState?.activeResults || []
   };
 
-  // 1. Invoke Gemini for Intent & Requirement Extraction
-  if (genAI) {
-    const geminiResult = await callGeminiWithContext(contextPackage, [], image);
-    if (geminiResult && geminiResult.message) {
-      const finalState = geminiResult.is_complete ? "REQUIREMENTS_COMPLETE" : "COLLECTING_REQUIREMENTS";
-      const shouldSearchProducts = geminiResult.shouldSearchProducts || (geminiResult.confidence && geminiResult.confidence > 0.85);
+  // 1. Invoke configured AI providers for Intent & Requirement Extraction
+  const geminiResult = await callGeminiWithContext(contextPackage, [], image);
+  if (geminiResult && geminiResult.message) {
+      const detectedCategory = getActiveCategoryFromContext(userQuery, effectiveHistory) || sessionState?.category;
+      const hasDirectConstraints = /\b(?:under|below|upto|up to|budget|with|for|need|want|looking for|size|color|colour|brand|ram|storage|camera|battery|gaming|coding|oversized|cotton|silk|anc|5g|trimmer|hoodie|shirt|pants)\b/i.test(userQuery);
+      const hasBudgetConstraint = /(?:under|below|upto|up\s*to|budget)\s*(?:₹|rs\.?|inr)?\s*\d+|₹\s*\d+|\d+\s*(?:k|hazar|thousand)\b/i.test(userQuery);
+      const hasStructuredRequirements = Boolean(
+        geminiResult.requirements && (
+          geminiResult.requirements.budget ||
+          geminiResult.requirements.budgetMax ||
+          geminiResult.requirements.priorities?.length ||
+          geminiResult.requirements.customRequirements
+        )
+      );
+      const shouldSearchProducts = Boolean(
+        geminiResult.shouldSearchProducts ||
+        geminiResult.is_complete ||
+        (detectedCategory && hasDirectConstraints && (hasStructuredRequirements || hasBudgetConstraint)) ||
+        (geminiResult.confidence && geminiResult.confidence > 0.85)
+      );
+      const finalState = shouldSearchProducts ? "REQUIREMENTS_COMPLETE" : "COLLECTING_REQUIREMENTS";
 
       let finalProducts = [];
       let relatedProducts = [];
 
       // 2. Fetch Products from MongoDB if Requirements Sufficient
       let searchRes = null;
+      let candidateProducts = [];
+      const aiRequirements = {
+        ...(geminiResult.requirements || {}),
+        category: detectedCategory || geminiResult.category || geminiResult.requirements?.category || 'all',
+        query: userQuery
+      };
       if (shouldSearchProducts) {
-         searchRes = await searchProducts(geminiResult.requirements || {}, null, 30);
-         const candidateProducts = searchRes.products || [];
+        searchRes = await searchProducts(aiRequirements, null, 30);
+         candidateProducts = searchRes.products || [];
          
          if (candidateProducts.length > 0) {
             // Stage 2: AI Re-Ranking (The Magic)
-            finalProducts = await rankProductsWithGemini(userQuery, geminiResult.requirements, candidateProducts);
-            relatedProducts = await getRelatedProducts(geminiResult.requirements?.category || geminiResult.category);
+          finalProducts = await rankProductsWithGemini(userQuery, aiRequirements, candidateProducts, effectiveHistory);
+          relatedProducts = await getRelatedProducts(aiRequirements.category);
          }
       }
 
@@ -2390,15 +2737,20 @@ export async function processAIAgentQuery(userQuery, conversationHistory = [], c
         };
       }
 
+      const assistantText = hideProductIdsFromText(geminiResult.message, candidateProducts);
+      await rememberShoppingTurn(sessionId, sessionState, userQuery, assistantText, aiRequirements.category, aiRequirements, finalProducts, cartContext);
       return {
         success: true,
         state: finalState,
-        reply: geminiResult.message,
-        text: geminiResult.message,
+        reply: assistantText,
+        text: assistantText,
         agentAction: geminiResult.agentAction || null,
-        questionnaire: geminiResult.questionnaire || null,
+        questionnaire: geminiResult.questionnaire ? {
+          ...geminiResult.questionnaire,
+          category: geminiResult.category || getActiveCategoryFromContext(userQuery, effectiveHistory) || null
+        } : null,
         requirements: geminiResult.requirements || {},
-        products: finalProducts,
+        products: finalProducts.slice(0, 6),
         relatedProducts: relatedProducts,
         nextCursor: searchRes?.nextCursor || null,
         hasMoreProducts: searchRes?.hasMore || false,
@@ -2406,9 +2758,50 @@ export async function processAIAgentQuery(userQuery, conversationHistory = [], c
         suggestedFollowUpQueries: geminiResult.questionnaire ? geminiResult.questionnaire.options.slice(0, 4).map(o => o.label || o.value) : ["Show My Cart 🛒", "Top Deals Today 🔥"]
       };
     }
-  }
 
-  // Fallback if Gemini fails
+    // Provider outage fallback: keep the commerce flow useful with local extraction + catalog ranking.
+    const fallbackCategory = getActiveCategoryFromContext(userQuery, conversationHistory);
+    const fallbackDetails = extractDetailedRequirements(userQuery, conversationHistory);
+    const fallbackHasConstraints = Boolean(fallbackCategory && (
+      fallbackDetails.numericBudget ||
+      /\b(?:with|for|under|below|budget|gaming|coding|oversized|cotton|silk|camera|battery|trimmer|hoodie|shirt|pants)\b/i.test(userQuery)
+    ));
+    if (fallbackHasConstraints) {
+      const fallbackRequirements = {
+        category: fallbackCategory,
+        query: userQuery,
+        budgetMax: fallbackDetails.numericBudget || undefined,
+        priorities: fallbackDetails.keySpecsMatched || [],
+        intent: fallbackDetails.intent
+      };
+      const fallbackSearch = await searchProducts(fallbackRequirements, null, 30);
+      const fallbackProducts = enrichProductsWithRequirementMatch(
+        (fallbackSearch.products || []).slice(0, 6),
+        fallbackDetails,
+        userQuery
+      );
+      return {
+        success: true,
+        state: fallbackProducts.length > 0 ? "REQUIREMENTS_COMPLETE" : "COLLECTING_REQUIREMENTS",
+        reply: fallbackProducts.length > 0
+          ? "AI provider busy tha, isliye catalog requirements ke basis par best matches dikha raha hoon."
+          : "Abhi is requirement ke liye catalog mein exact match nahi mila.",
+        text: fallbackProducts.length > 0
+          ? "AI provider busy tha, isliye catalog requirements ke basis par best matches dikha raha hoon."
+          : "Abhi is requirement ke liye catalog mein exact match nahi mila.",
+        agentAction: null,
+        questionnaire: null,
+        requirements: fallbackRequirements,
+        products: fallbackProducts,
+        relatedProducts: [],
+        nextCursor: fallbackSearch.nextCursor || null,
+        hasMoreProducts: fallbackSearch.hasMore || false,
+        inChatCheckout: null,
+        suggestedFollowUpQueries: ["Show more matches", "Change budget", "Refine requirements"]
+      };
+    }
+
+    // Fallback if no provider response and no concrete shopping constraints were supplied.
   return {
     success: true,
     state: "COLLECTING_REQUIREMENTS",
@@ -2500,6 +2893,13 @@ function generateDynamicFallback(userQuery, stateAnalysis, detectedReqs, candida
       : "Sorry, I didn't quite understand that. Could you tell me what product or category you'd like to shop for? 😊";
   }
 
+  if (questionnaire) {
+    questionnaire = {
+      ...questionnaire,
+      category: stateAnalysis.category || getActiveCategoryFromContext(userQuery, conversationHistory) || null
+    };
+  }
+
   return {
     success: true,
     state: stateAnalysis.state,
@@ -2542,7 +2942,8 @@ export async function streamAIAgentQuery(userQuery, conversationHistory = [], ca
   };
 
   try {
-    sendEvent('status', { message: 'Infinity AI is understanding your request...' });
+    const progressMessages = getProgressMessages(userQuery);
+    progressMessages.slice(0, 3).forEach(message => sendEvent('status', { message }));
 
     // 1. Execute AI commerce pipeline
     const result = await processAIAgentQuery(userQuery, conversationHistory, cartContext, userProfile, image, sessionId);
@@ -2564,6 +2965,11 @@ export async function streamAIAgentQuery(userQuery, conversationHistory = [], ca
     // 3. Emit Structured Events (question, products, action, done)
     if (result.questionnaire) {
       sendEvent('question', result.questionnaire);
+    }
+
+    if (result.products?.length > 0) {
+      sendEvent('status', { message: progressMessages[3] });
+      sendEvent('status', { message: progressMessages[4] });
     }
 
     if (result.products && result.products.length > 0) {

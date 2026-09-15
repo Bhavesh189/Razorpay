@@ -1068,11 +1068,24 @@ export class ProductSearchEngine {
     const specKeywords = validTokens.filter(t => /\d+(?:gb|tb|l|v|w|fps|hz|mp)|rtx|gtx|amoled|oled|intel|ryzen|snapdragon|anc|5g|4k/i.test(t));
     const hasSpecKeywords = specKeywords.length > 0;
     const effectivePhrase = correctedQuery || cleanedQuery;
+    const laptopAccessoryIntent = /\b(?:bags?|backpacks?|sleeves?|cases?|covers?|chargers?|stands?|docks?|mice|keyboards?|accessor(?:y|ies))\b/i.test(cleanedQuery);
+    const laptopProductIntent = /\b(?:laptop|notebook|ultrabook)\b/i.test(cleanedQuery) && !laptopAccessoryIntent;
 
     for (let i = 0; i < candidateIndices.length; i++) {
       const docIdx = candidateIndices[i];
       const p = this.products[docIdx];
       if (!p) continue;
+
+      // A plain laptop query should not be dominated by laptop bags/backpacks.
+      // Keep accessory results available when the user explicitly asks for them.
+      if (laptopProductIntent) {
+        const productText = `${p.title || ''} ${p.category || ''} ${p.subCategory || ''}`.toLowerCase();
+        if (/\b(?:bags?|backpacks?|sleeves?|cases?|covers?|chargers?|stands?|docks?|mice|keyboards?|accessor(?:y|ies))\b/i.test(productText)) continue;
+      }
+      if (laptopAccessoryIntent && /\blaptop\b/i.test(cleanedQuery)) {
+        const productText = `${p.title || ''} ${p.category || ''} ${p.subCategory || ''}`.toLowerCase();
+        if (!/\blaptop\b/i.test(productText)) continue;
+      }
 
       // Strict user filters
       if (catFilterSet && !catFilterSet.has(docIdx)) continue;

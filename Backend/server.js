@@ -21,6 +21,7 @@ import { redisService } from './services/redisService.js';
 
 import { Product } from './src/models/Product.js';
 import { fullCategoryHierarchy } from './data/products/catalogHierarchy.js';
+import { logger } from './src/utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -68,9 +69,9 @@ mongoose.connection.once('open', async () => {
     searchEngine = new ProductSearchEngine(productsFromDb);
     app.locals.searchEngine = searchEngine;
     setSearchEngine(searchEngine);
-    console.log(`[AI Search Engine] Loaded ${productsFromDb.length} products from MongoDB into memory.`);
+    logger.info('search.index.ready', { productCount: productsFromDb.length });
   } catch (error) {
-    console.error('[AI Search Engine] Failed to load products for AI', error);
+    logger.error('search.index.failed', { error });
   }
 });
 
@@ -84,7 +85,13 @@ app.use((req, res, next) => {
   res.on('finish', () => {
     const duration = (performance.now() - start).toFixed(1);
     if (!req.path.startsWith('/health')) {
-      console.log(`📡 [${req.method}] ${req.originalUrl || req.url} - ${res.statusCode} (${duration}ms) [${req.id}]`);
+      logger.info('http.request.completed', {
+        requestId: req.id,
+        method: req.method,
+        path: req.originalUrl || req.url,
+        statusCode: res.statusCode,
+        durationMs: Number(duration)
+      });
     }
   });
   next();
@@ -125,7 +132,7 @@ app.post('/api/ai/chat/stream', async (req, res) => {
     const activeSessionId = sessionId || req.headers['x-session-id'] || "default_session";
     await streamAIAgentQuery(query, history, cartContext, userProfile, image, activeSessionId, res);
   } catch (error) {
-    console.error('[AI Stream Error]:', error);
+    logger.error('ai.stream.failed', { requestId: req.id, error });
     if (!res.headersSent) res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -144,7 +151,7 @@ app.post('/api/ai/chat', async (req, res) => {
     }
     return res.json(result);
   } catch (error) {
-    console.error("[Infinity AI Error]:", error);
+    logger.error('ai.request.failed', { requestId: req.id, error });
     return res.status(500).json({ success: false, error: "Failed to process AI query", message: error.message });
   }
 });
@@ -242,23 +249,23 @@ app.use((req, res, next) => {
 
 // Centralized Error Handler
 app.use((err, req, res, next) => {
-  console.error('[Global Error]', err);
+  logger.error('http.request.failed', { requestId: req.id, error: err, method: req.method, path: req.originalUrl || req.url });
   const status = err.statusCode || 500;
   const message = process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong on the server';
   res.status(status).json({ success: false, message });
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Infinity Store AI Backend running on http://localhost:${PORT}`);
+  logger.info('server.started', { port: PORT, environment: process.env.NODE_ENV || 'development' });
 });
 
 // Graceful Shutdown Handler
 const handleShutdown = async (signal) => {
-  console.log(`\n🛑 [Server] Received ${signal}. Closing server gracefully...`);
+  logger.info('server.shutdown.started', { signal });
   server.close(async () => {
     await redisService.disconnect();
     import('mongoose').then(m => m.default.connection.close());
-    console.log('🛑 [Server] Cleanly closed server and Redis connections.');
+    logger.info('server.shutdown.completed', { signal });
     process.exit(0);
   });
   setTimeout(() => process.exit(1), 5000);
@@ -267,3 +274,4 @@ const handleShutdown = async (signal) => {
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 // Trigger restart
+// Cache invalidated at 1789388089423

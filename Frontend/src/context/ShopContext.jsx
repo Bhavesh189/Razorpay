@@ -218,16 +218,16 @@ export const ShopProvider = ({ children }) => {
     const fetchCloudData = async () => {
       try {
         const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-        
+
         // Check if user is logged in via HTTP-only cookie
         const meRes = await fetch(`${API_URL}/auth/me`, { credentials: 'include' });
         const meData = await meRes.json();
-        
+
         if (meRes.ok && meData.success) {
           setUser({ isLoggedIn: true, phone: meData.user.phoneNumber, name: meData.user.name, id: meData.user._id });
           if (meData.user.cart) setCart(meData.user.cart);
           if (meData.user.wishlist) setWishlist(meData.user.wishlist);
-          
+
           // Fetch orders
           const ordRes = await fetch(`${API_URL}/user/orders`, { credentials: 'include' });
           const ordData = await ordRes.json();
@@ -238,11 +238,11 @@ export const ShopProvider = ({ children }) => {
         } else if (meRes.status === 401) {
           setUser({ isLoggedIn: false, phone: "", name: "" }); // Session expired
         }
-      } catch(e) {
+      } catch (e) {
         console.warn("Failed to fetch cloud data on mount", e);
       }
     };
-    
+
     fetchCloudData();
   }, []);
 

@@ -1,6 +1,7 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { logger } from '../src/utils/logger.js';
 
 dotenv.config();
 
@@ -64,7 +65,7 @@ export async function createRazorpayOrder(amount, currency = 'INR', receipt = ''
   try {
     if (razorpayInstance) {
       const order = await razorpayInstance.orders.create(options);
-      console.log(`[Razorpay] ✅ Order created on Razorpay API: ${order.id} for ₹${amount}`);
+      logger.info('payment.order.created', { provider: 'razorpay', orderId: order.id, amount, currency, liveApi: true });
 
       paymentStore.set(order.id, {
         orderId: order.id,
@@ -85,7 +86,7 @@ export async function createRazorpayOrder(amount, currency = 'INR', receipt = ''
       };
     }
   } catch (error) {
-    console.warn('[Razorpay API Note]:', error?.error?.description || error?.message || 'Key auth error on remote server');
+    logger.warn('payment.provider.failed', { provider: 'razorpay', amount, currency, message: error?.error?.description || error?.message || 'Provider request failed' });
   }
 
   // Simulated fallback order for testing environments
@@ -209,7 +210,7 @@ export async function processRazorpayWebhook(eventPayload, eventId, rawBody, sig
 
   // 2. Idempotency Check: Prevent duplicate execution of replayed webhooks
   if (processedWebhookEvents.has(actualEventId)) {
-    console.log(`[Razorpay Webhook] ⚡ Idempotency: Event ${actualEventId} already processed. Skipping duplicate execution.`);
+    logger.info('payment.webhook.duplicate', { eventId: actualEventId });
     return {
       success: true,
       statusCode: 200,
@@ -221,7 +222,7 @@ export async function processRazorpayWebhook(eventPayload, eventId, rawBody, sig
     };
   }
 
-  console.log(`[Razorpay Webhook] 🔔 Processing verified event: ${eventType} (${actualEventId})`);
+  logger.info('payment.webhook.processed', { eventId: actualEventId, eventType });
 
   let targetOrderId = null;
   let paymentState = PaymentState.PAYMENT_PENDING;
